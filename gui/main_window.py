@@ -5,14 +5,13 @@ from pathlib import Path
 from typing import Optional
 
 from PySide6.QtCore import QPointF
-from PySide6.QtGui import QAction, QActionGroup
+from PySide6.QtGui import QAction, QActionGroup, QUndoStack
 from PySide6.QtWidgets import (
     QFileDialog,
     QInputDialog,
     QMainWindow,
     QMessageBox,
     QToolBar,
-    QUndoStack,
 )
 
 from gui.scene_view import GraphMode, GraphScene, GraphView
