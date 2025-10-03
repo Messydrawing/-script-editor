@@ -5,7 +5,7 @@ from enum import Enum, auto
 from typing import Iterable, Optional
 
 from PySide6.QtCore import QPointF, QRectF, Signal
-from PySide6.QtGui import QTransform
+from PySide6.QtGui import QPainter, QTransform
 from PySide6.QtWidgets import QGraphicsScene, QGraphicsView
 
 from gui.edge_item import EdgeItem
@@ -92,7 +92,7 @@ class GraphView(QGraphicsView):
 
     def __init__(self, scene: GraphScene, parent=None) -> None:
         super().__init__(scene, parent)
-        self.setRenderHints(self.renderHints() | self.RenderHint.Antialiasing)
+        self.setRenderHints(self.renderHints() | QPainter.RenderHint.Antialiasing)
         self.setDragMode(self.DragMode.RubberBandDrag)
         self.setViewportUpdateMode(self.ViewportUpdateMode.BoundingRectViewportUpdate)
 
