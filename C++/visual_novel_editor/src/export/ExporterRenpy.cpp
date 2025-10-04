@@ -1,8 +1,10 @@
 #include "ExporterRenpy.h"
 
 #include <QFile>
-#include <QTextStream>
 #include <QStringList>
+#include <QTextDocument>
+#include <QTextStream>
+#include <Qt>
 
 #include "ScriptFormatter.h"
 #include "model/Choice.h"
@@ -51,7 +53,14 @@ void ExporterRenpy::generateNode(const QString &nodeId, QTextStream &out, int in
 
     out << "label " << nodeId << ":\n";
 
-    const QStringList lines = node->script().split('\n');
+    QTextDocument document;
+    const QString script = node->script();
+    if (Qt::mightBeRichText(script)) {
+        document.setHtml(script);
+    } else {
+        document.setPlainText(script);
+    }
+    const QStringList lines = document.toPlainText().split('\n');
     for (const QString &line : lines) {
         out << ScriptFormatter::indent(indent + 4) << line.trimmed() << '\n';
     }

@@ -78,15 +78,16 @@ void MainWindow::setupScene()
     m_view->setRubberBandSelectionMode(Qt::IntersectsItemShape);
     setCentralWidget(m_view);
 
-    auto *dock = new QDockWidget(tr("Inspector"), this);
-    m_inspector = new NodeInspectorWidget(dock);
+    m_inspectorDock = new QDockWidget(tr("Inspector"), this);
+    m_inspector = new NodeInspectorWidget(m_inspectorDock);
     connect(m_inspector, &NodeInspectorWidget::nodeUpdated, this, [this](const QString &id) {
         if (m_scene && !id.isEmpty()) {
             m_scene->refreshNode(id);
         }
     });
-    dock->setWidget(m_inspector);
-    addDockWidget(Qt::RightDockWidgetArea, dock);
+    connect(m_inspector, &NodeInspectorWidget::expandRequested, this, &MainWindow::toggleInspectorExpanded);
+    m_inspectorDock->setWidget(m_inspector);
+    addDockWidget(Qt::RightDockWidgetArea, m_inspectorDock);
 }
 
 void MainWindow::newProject()
@@ -221,4 +222,49 @@ void MainWindow::onNodeSelected(const QString &nodeId)
             m_inspector->setNode(node);
         }
     }
+}
+
+void MainWindow::toggleInspectorExpanded(bool expanded)
+{
+    if (!m_inspector || !m_inspectorDock) {
+        return;
+    }
+
+    if (m_isInspectorExpanded == expanded) {
+        m_inspector->setExpanded(expanded);
+        return;
+    }
+
+    if (expanded) {
+        QWidget *currentCentral = takeCentralWidget();
+        if (currentCentral) {
+            m_previousCentralWidget = currentCentral;
+            m_previousCentralWidget->setParent(this);
+            m_previousCentralWidget->hide();
+        }
+
+        m_inspectorDock->setWidget(nullptr);
+        m_inspectorDock->hide();
+        m_inspector->setParent(this);
+        setCentralWidget(m_inspector);
+    } else {
+        QWidget *currentCentral = takeCentralWidget();
+        if (currentCentral && currentCentral != m_inspector) {
+            currentCentral->setParent(this);
+        }
+
+        QWidget *widgetToRestore = m_previousCentralWidget ? m_previousCentralWidget : m_view;
+        if (widgetToRestore) {
+            widgetToRestore->setParent(this);
+            widgetToRestore->show();
+            setCentralWidget(widgetToRestore);
+        }
+
+        m_inspectorDock->setWidget(m_inspector);
+        m_inspectorDock->show();
+        m_previousCentralWidget = nullptr;
+    }
+
+    m_isInspectorExpanded = expanded;
+    m_inspector->setExpanded(expanded);
 }

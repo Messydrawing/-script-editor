@@ -1,9 +1,26 @@
 #include "NodeInspectorWidget.h"
 
+#include <QAction>
+#include <cmath>
+#include <QColor>
+#include <QColorDialog>
+#include <QComboBox>
+#include <QFont>
+#include <QFontDatabase>
 #include <QFormLayout>
+#include <QHBoxLayout>
+#include <QIntValidator>
+#include <QLabel>
 #include <QLineEdit>
 #include <QSignalBlocker>
+#include <QSize>
+#include <QTextCharFormat>
+#include <QTextCursor>
 #include <QTextEdit>
+#include <QToolBar>
+#include <QToolButton>
+#include <QVBoxLayout>
+#include <Qt>
 
 #include "model/StoryNode.h"
 
@@ -12,18 +29,103 @@ NodeInspectorWidget::NodeInspectorWidget(QWidget *parent)
     , m_titleEdit(new QLineEdit(this))
     , m_scriptEdit(new QTextEdit(this))
 {
-    auto *layout = new QFormLayout(this);
-    layout->addRow(tr("Title"), m_titleEdit);
-    layout->addRow(tr("Script"), m_scriptEdit);
+    auto *mainLayout = new QVBoxLayout(this);
+    mainLayout->setContentsMargins(0, 0, 0, 0);
+    mainLayout->setSpacing(8);
+
+    auto *headerLayout = new QHBoxLayout;
+    auto *titleLabel = new QLabel(tr("Node Inspector"), this);
+    titleLabel->setStyleSheet(QStringLiteral("font-weight: bold;"));
+    headerLayout->addWidget(titleLabel);
+    headerLayout->addStretch();
+    m_expandButton = new QToolButton(this);
+    m_expandButton->setCheckable(true);
+    m_expandButton->setAutoRaise(true);
+    m_expandButton->setToolTip(tr("Expand inspector to full window"));
+    m_expandButton->setText(QStringLiteral("⤢"));
+    headerLayout->addWidget(m_expandButton);
+    mainLayout->addLayout(headerLayout);
+
+    auto *formLayout = new QFormLayout;
+    formLayout->addRow(tr("Title"), m_titleEdit);
+    mainLayout->addLayout(formLayout);
+
+    m_formatToolbar = new QToolBar(this);
+    m_formatToolbar->setIconSize(QSize(16, 16));
+    m_formatToolbar->setMovable(false);
+    m_formatToolbar->setFloatable(false);
+
+    m_boldAction = m_formatToolbar->addAction(tr("B"));
+    QFont boldFont = font();
+    boldFont.setBold(true);
+    m_boldAction->setFont(boldFont);
+    m_boldAction->setCheckable(true);
+
+    m_italicAction = m_formatToolbar->addAction(tr("I"));
+    QFont italicFont = font();
+    italicFont.setItalic(true);
+    m_italicAction->setFont(italicFont);
+    m_italicAction->setCheckable(true);
+
+    m_underlineAction = m_formatToolbar->addAction(tr("U"));
+    QFont underlineFont = font();
+    underlineFont.setUnderline(true);
+    m_underlineAction->setFont(underlineFont);
+    m_underlineAction->setCheckable(true);
+
+    m_formatToolbar->addSeparator();
+
+    m_colorButton = new QToolButton(this);
+    m_colorButton->setText(tr("Color"));
+    m_colorButton->setAutoRaise(true);
+    m_formatToolbar->addWidget(m_colorButton);
+
+    m_fontSizeCombo = new QComboBox(this);
+    m_fontSizeCombo->setEditable(true);
+    m_fontSizeCombo->setInsertPolicy(QComboBox::NoInsert);
+    m_fontSizeCombo->lineEdit()->setValidator(new QIntValidator(1, 200, m_fontSizeCombo));
+    const QList<int> sizes = QFontDatabase::standardSizes();
+    for (int size : sizes) {
+        m_fontSizeCombo->addItem(QString::number(size));
+    }
+    m_fontSizeCombo->setCurrentText(QString::number(m_scriptEdit->fontPointSize() > 0 ? static_cast<int>(m_scriptEdit->fontPointSize()) : 12));
+    m_formatToolbar->addWidget(m_fontSizeCombo);
+
+    mainLayout->addWidget(m_formatToolbar);
+    mainLayout->addWidget(m_scriptEdit, 1);
 
     connect(m_titleEdit, &QLineEdit::textEdited, this, &NodeInspectorWidget::onTitleEdited);
     connect(m_scriptEdit, &QTextEdit::textChanged, this, &NodeInspectorWidget::onScriptEdited);
+    connect(m_scriptEdit, &QTextEdit::currentCharFormatChanged, this, &NodeInspectorWidget::onCurrentCharFormatChanged);
+    connect(m_scriptEdit, &QTextEdit::cursorPositionChanged, this, [this]() {
+        onCurrentCharFormatChanged(m_scriptEdit->currentCharFormat());
+    });
+    connect(m_expandButton, &QToolButton::toggled, this, &NodeInspectorWidget::onExpandToggled);
+    connect(m_boldAction, &QAction::toggled, this, &NodeInspectorWidget::applyBold);
+    connect(m_italicAction, &QAction::toggled, this, &NodeInspectorWidget::applyItalic);
+    connect(m_underlineAction, &QAction::toggled, this, &NodeInspectorWidget::applyUnderline);
+    connect(m_fontSizeCombo, &QComboBox::currentTextChanged, this, &NodeInspectorWidget::changeFontSize);
+    connect(m_colorButton, &QToolButton::clicked, this, &NodeInspectorWidget::chooseTextColor);
+
+    m_scriptEdit->setAcceptRichText(true);
 }
 
 void NodeInspectorWidget::setNode(StoryNode *node)
 {
     m_node = node;
     refresh();
+}
+
+void NodeInspectorWidget::setExpanded(bool expanded)
+{
+    if (m_isExpanded == expanded) {
+        return;
+    }
+
+    m_isExpanded = expanded;
+    const QSignalBlocker blocker(m_expandButton);
+    m_expandButton->setChecked(expanded);
+    updateExpandButtonAppearance();
 }
 
 void NodeInspectorWidget::onTitleEdited(const QString &text)
@@ -40,8 +142,84 @@ void NodeInspectorWidget::onScriptEdited()
     if (!m_node) {
         return;
     }
-    m_node->setScript(m_scriptEdit->toPlainText());
+    m_node->setScript(m_scriptEdit->toHtml());
     emit nodeUpdated(m_node->id());
+}
+
+void NodeInspectorWidget::onExpandToggled(bool expanded)
+{
+    if (m_isExpanded == expanded) {
+        updateExpandButtonAppearance();
+    } else {
+        m_isExpanded = expanded;
+        updateExpandButtonAppearance();
+        emit expandRequested(expanded);
+    }
+}
+
+void NodeInspectorWidget::applyBold(bool enabled)
+{
+    if (m_blockFormatSignals) {
+        return;
+    }
+    QTextCharFormat format;
+    format.setFontWeight(enabled ? QFont::Bold : QFont::Normal);
+    mergeFormatOnSelection(format);
+}
+
+void NodeInspectorWidget::applyItalic(bool enabled)
+{
+    if (m_blockFormatSignals) {
+        return;
+    }
+    QTextCharFormat format;
+    format.setFontItalic(enabled);
+    mergeFormatOnSelection(format);
+}
+
+void NodeInspectorWidget::applyUnderline(bool enabled)
+{
+    if (m_blockFormatSignals) {
+        return;
+    }
+    QTextCharFormat format;
+    format.setFontUnderline(enabled);
+    mergeFormatOnSelection(format);
+}
+
+void NodeInspectorWidget::changeFontSize(const QString &sizeText)
+{
+    if (m_blockFormatSignals) {
+        return;
+    }
+    bool ok = false;
+    const qreal size = sizeText.toDouble(&ok);
+    if (!ok || size <= 0.0) {
+        return;
+    }
+    QTextCharFormat format;
+    format.setFontPointSize(size);
+    mergeFormatOnSelection(format);
+}
+
+void NodeInspectorWidget::chooseTextColor()
+{
+    const QColor color = QColorDialog::getColor(m_scriptEdit->currentCharFormat().foreground().color(), this, tr("Select Text Color"));
+    if (!color.isValid()) {
+        return;
+    }
+    QTextCharFormat format;
+    format.setForeground(color);
+    mergeFormatOnSelection(format);
+
+    if (m_colorButton) {
+        m_colorButton->setStyleSheet(QStringLiteral("background-color: %1").arg(color.name()));
+    }
+}
+
+void NodeInspectorWidget::onCurrentCharFormatChanged(const QTextCharFormat &format)
+{
+    updateFormatControls(format);
 }
 
 void NodeInspectorWidget::refresh()
@@ -50,9 +228,77 @@ void NodeInspectorWidget::refresh()
     const QSignalBlocker blocker2(m_scriptEdit);
     if (m_node) {
         m_titleEdit->setText(m_node->title());
-        m_scriptEdit->setPlainText(m_node->script());
+        const QString script = m_node->script();
+        if (Qt::mightBeRichText(script)) {
+            m_scriptEdit->setHtml(script);
+        } else {
+            m_scriptEdit->setPlainText(script);
+        }
     } else {
         m_titleEdit->clear();
         m_scriptEdit->clear();
     }
+    updateFormatControls(m_scriptEdit->currentCharFormat());
+}
+
+void NodeInspectorWidget::updateExpandButtonAppearance()
+{
+    if (!m_expandButton) {
+        return;
+    }
+    if (m_isExpanded) {
+        m_expandButton->setText(QStringLiteral("⤺"));
+        m_expandButton->setToolTip(tr("Restore inspector to sidebar"));
+    } else {
+        m_expandButton->setText(QStringLiteral("⤢"));
+        m_expandButton->setToolTip(tr("Expand inspector to full window"));
+    }
+}
+
+void NodeInspectorWidget::mergeFormatOnSelection(const QTextCharFormat &format)
+{
+    QTextCursor cursor = m_scriptEdit->textCursor();
+    if (!cursor.hasSelection()) {
+        cursor.select(QTextCursor::WordUnderCursor);
+    }
+    cursor.mergeCharFormat(format);
+    m_scriptEdit->mergeCurrentCharFormat(format);
+}
+
+void NodeInspectorWidget::updateFormatControls(const QTextCharFormat &format)
+{
+    m_blockFormatSignals = true;
+
+    if (m_boldAction) {
+        m_boldAction->setChecked(format.fontWeight() == QFont::Bold);
+    }
+    if (m_italicAction) {
+        m_italicAction->setChecked(format.fontItalic());
+    }
+    if (m_underlineAction) {
+        m_underlineAction->setChecked(format.fontUnderline());
+    }
+    if (m_fontSizeCombo) {
+        QSignalBlocker blocker(m_fontSizeCombo);
+        const qreal size = format.fontPointSize();
+        if (size > 0.0) {
+            const QString sizeText = QString::number(static_cast<int>(std::round(size)));
+            const int index = m_fontSizeCombo->findText(sizeText);
+            if (index >= 0) {
+                m_fontSizeCombo->setCurrentIndex(index);
+            } else {
+                m_fontSizeCombo->setEditText(sizeText);
+            }
+        }
+    }
+    if (m_colorButton) {
+        const QColor color = format.foreground().color();
+        if (color.isValid()) {
+            m_colorButton->setStyleSheet(QStringLiteral("background-color: %1").arg(color.name()));
+        } else {
+            m_colorButton->setStyleSheet(QString());
+        }
+    }
+
+    m_blockFormatSignals = false;
 }
