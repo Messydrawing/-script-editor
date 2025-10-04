@@ -5,6 +5,8 @@
 
 class QCoreApplication;
 
+class InlineTranslator;
+
 class LanguageManager : public QObject
 {
     Q_OBJECT
@@ -25,8 +27,6 @@ signals:
     void languageChanged(Language language);
 
 private:
-    class InlineTranslator;
-
     LanguageManager();
 
     QCoreApplication *m_app{nullptr};
