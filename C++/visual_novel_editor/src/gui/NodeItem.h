@@ -1,6 +1,8 @@
 #pragma once
 
 #include <QGraphicsObject>
+#include <QPointF>
+#include <QString>
 
 class StoryNode;
 

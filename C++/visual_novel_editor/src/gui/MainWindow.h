@@ -1,6 +1,7 @@
 #pragma once
 
 #include <QMainWindow>
+#include <QString>
 
 class GraphScene;
 class NodeInspectorWidget;
