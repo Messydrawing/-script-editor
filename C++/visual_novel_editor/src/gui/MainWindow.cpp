@@ -74,14 +74,15 @@ void MainWindow::setupScene()
 
     m_view = new QGraphicsView(m_scene, this);
     m_view->setRenderHint(QPainter::Antialiasing, true);
+    m_view->setDragMode(QGraphicsView::RubberBandDrag);
+    m_view->setRubberBandSelectionMode(Qt::IntersectsItemShape);
     setCentralWidget(m_view);
 
     auto *dock = new QDockWidget(tr("Inspector"), this);
     m_inspector = new NodeInspectorWidget(dock);
-    connect(m_inspector, &NodeInspectorWidget::nodeUpdated, [this](const QString &id) {
-        if (m_scene && m_project && !id.isEmpty()) {
-            m_scene->setProject(m_project);
-            Q_UNUSED(id);
+    connect(m_inspector, &NodeInspectorWidget::nodeUpdated, this, [this](const QString &id) {
+        if (m_scene && !id.isEmpty()) {
+            m_scene->refreshNode(id);
         }
     });
     dock->setWidget(m_inspector);

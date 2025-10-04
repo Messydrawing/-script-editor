@@ -32,8 +32,17 @@ void Project::removeNode(const QString &nodeId)
 {
     if (StoryNode *node = m_nodes.take(nodeId)) {
         delete node;
-        emit changed();
     }
+
+    for (StoryNode *otherNode : m_nodes) {
+        auto &choices = otherNode->choices();
+        for (int i = choices.size() - 1; i >= 0; --i) {
+            if (choices[i].targetNodeId == nodeId) {
+                choices.removeAt(i);
+            }
+        }
+    }
+    emit changed();
 }
 
 void Project::clear()
