@@ -4,8 +4,8 @@ from __future__ import annotations
 from enum import Enum, auto
 from typing import Iterable, Optional
 
-from PySide6.QtCore import QPointF, QRectF, Signal
-from PySide6.QtGui import QTransform
+from PySide6.QtCore import QPointF, QRectF, Signal, Qt
+from PySide6.QtGui import QTransform, QUndoStack
 from PySide6.QtWidgets import QGraphicsScene, QGraphicsView
 
 from gui.edge_item import EdgeItem
@@ -27,8 +27,14 @@ class GraphScene(QGraphicsScene):
         super().__init__(parent)
         self._mode = GraphMode.POINTER
         self._edge_start: Optional[NodeItem] = None
+        self._undo_stack: QUndoStack | None = None
+        self._move_snapshot: dict[int, QPointF] = {}
 
     # -- scene utilities -------------------------------------------------
+    def set_undo_stack(self, undo_stack: QUndoStack) -> None:
+        """Attach the QUndoStack used for scene mutations."""
+        self._undo_stack = undo_stack
+
     def set_mode(self, mode: GraphMode) -> None:
         self._mode = mode
         if mode != GraphMode.ADD_EDGE:
@@ -37,7 +43,13 @@ class GraphScene(QGraphicsScene):
     def mode(self) -> GraphMode:
         return self._mode
 
-    def create_node(self, node_id: int, summary: str, doc_path: str, position: Optional[QPointF] = None) -> NodeItem:
+    def create_node(
+        self,
+        node_id: int,
+        summary: str,
+        doc_path: str,
+        position: Optional[QPointF] = None,
+    ) -> NodeItem:
         node = NodeItem(node_id=node_id, summary=summary, doc_path=doc_path)
         if position is not None:
             node.setPos(position)
@@ -55,6 +67,27 @@ class GraphScene(QGraphicsScene):
             if isinstance(item, EdgeItem):
                 yield item
 
+    def selected_nodes(self) -> Iterable[NodeItem]:
+        for item in self.selectedItems():
+            if isinstance(item, NodeItem):
+                yield item
+
+    def find_node(self, node_id: int) -> Optional[NodeItem]:
+        for node in self.nodes():
+            if node.node_id == node_id:
+                return node
+        return None
+
+    def find_edge(self, source_id: int, dest_id: int, condition: str) -> Optional[EdgeItem]:
+        for edge in self.edges():
+            if (
+                edge.source.node_id == source_id
+                and edge.dest.node_id == dest_id
+                and edge.text_item.toPlainText() == condition
+            ):
+                return edge
+        return None
+
     def remove_item(self, item) -> None:
         if isinstance(item, EdgeItem):
             item.remove()
@@ -69,6 +102,12 @@ class GraphScene(QGraphicsScene):
 
     # -- Qt events -------------------------------------------------------
     def mousePressEvent(self, event):  # type: ignore[override]
+        if event.button() == Qt.MouseButton.LeftButton:
+            clicked = self.itemAt(event.scenePos(), QTransform())
+            tracked_nodes = list(self.selected_nodes())
+            if isinstance(clicked, NodeItem) and clicked not in tracked_nodes:
+                tracked_nodes.append(clicked)
+            self._move_snapshot = {node.node_id: QPointF(node.pos()) for node in tracked_nodes}
         if self._mode == GraphMode.ADD_EDGE:
             item = self.itemAt(event.scenePos(), QTransform())
             if isinstance(item, NodeItem):
@@ -85,6 +124,29 @@ class GraphScene(QGraphicsScene):
             else:
                 self._edge_start = None
         super().mousePressEvent(event)
+
+    def mouseReleaseEvent(self, event):  # type: ignore[override]
+        super().mouseReleaseEvent(event)
+        if (
+            event.button() == Qt.MouseButton.LeftButton
+            and self._undo_stack is not None
+            and self._move_snapshot
+        ):
+            after: dict[int, QPointF] = {}
+            for node_id, before_pos in self._move_snapshot.items():
+                node = self.find_node(node_id)
+                if node is None:
+                    continue
+                current_pos = QPointF(node.pos())
+                if current_pos != before_pos:
+                    after[node_id] = current_pos
+            if after:
+                from src.gui.commands import MoveNodesCommand
+
+                before = {node_id: self._move_snapshot[node_id] for node_id in after}
+                command = MoveNodesCommand(self, before, after)
+                self._undo_stack.push(command)
+        self._move_snapshot = {}
 
 
 class GraphView(QGraphicsView):
