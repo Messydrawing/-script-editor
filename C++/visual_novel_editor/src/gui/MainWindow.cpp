@@ -2,16 +2,22 @@
 
 #include <QAction>
 #include <QActionGroup>
+#include <QCoreApplication>
 #include <QDockWidget>
 #include <QEvent>
+#include <QEventLoop>
 #include <QFileDialog>
 #include <QGraphicsItem>
 #include <QGraphicsView>
 #include <QMenu>
 #include <QMenuBar>
 #include <QMessageBox>
+#include <QMetaObject>
+#include <QPointer>
+#include <QProgressDialog>
 #include <QStatusBar>
 #include <QToolBar>
+#include <QTimer>
 #include <QKeySequence>
 
 #include "GraphScene.h"
@@ -235,12 +241,61 @@ void MainWindow::exportToRenpy()
         return;
     }
 
+    auto progressDialog = QPointer<QProgressDialog>(new QProgressDialog(tr("Exporting Ren'Py script..."), tr("Cancel"), 0, 1, this));
+    progressDialog->setWindowTitle(tr("Exporting"));
+    progressDialog->setWindowModality(Qt::ApplicationModal);
+    progressDialog->setMinimumDuration(0);
+    progressDialog->setAutoClose(false);
+    progressDialog->setAutoReset(false);
+    progressDialog->show();
+
     ExporterRenpy exporter(m_project);
-    if (!exporter.exportToFile(fileName)) {
-        QMessageBox::warning(this, tr("Export Failed"), tr("Could not export Ren'Py script."));
-    } else {
-        setStatusMessage(QStringLiteral("Exported to Ren'Py"), 2000);
+
+    exporter.setProgressCallback([progressDialog](int current, int total) {
+        if (!progressDialog) {
+            return false;
+        }
+
+        if (progressDialog->wasCanceled()) {
+            return false;
+        }
+
+        QMetaObject::invokeMethod(progressDialog.data(), [progressDialog, current, total]() {
+            if (!progressDialog) {
+                return;
+            }
+            progressDialog->setMaximum(total);
+            progressDialog->setValue(current);
+        }, Qt::QueuedConnection);
+
+        QCoreApplication::processEvents(QEventLoop::AllEvents);
+        return true;
+    });
+
+    bool exportResult = false;
+    QEventLoop loop;
+    QTimer::singleShot(0, this, [&]() {
+        exportResult = exporter.exportToFile(fileName);
+        loop.quit();
+    });
+    loop.exec();
+
+    if (progressDialog) {
+        progressDialog->close();
+        progressDialog->deleteLater();
     }
+
+    if (exporter.wasCanceled()) {
+        setStatusMessage(tr("Export canceled"), 2000);
+        return;
+    }
+
+    if (!exportResult) {
+        QMessageBox::warning(this, tr("Export Failed"), tr("Could not export Ren'Py script."));
+        return;
+    }
+
+    setStatusMessage(QStringLiteral("Exported to Ren'Py"), 2000);
 }
 
 void MainWindow::onNodeSelected(const QString &nodeId)
