@@ -7,6 +7,8 @@
 class NodeItem;
 class Choice;
 
+class EditableLabelItem;
+
 class EdgeItem : public QGraphicsObject
 {
     Q_OBJECT
@@ -34,6 +36,6 @@ private:
     QString m_choiceId;
     QPainterPath m_path;
     QRectF m_boundingRect;
-    class EditableLabelItem *m_label{nullptr};
+    EditableLabelItem *m_label{nullptr};
     bool m_ignoreLabelSignal{false};
 };
