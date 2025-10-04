@@ -18,6 +18,7 @@ NodeItem::NodeItem(StoryNode *node, QGraphicsItem *parent)
 {
     setFlag(ItemIsMovable, true);
     setFlag(ItemIsSelectable, true);
+    setFlag(ItemSendsGeometryChanges, true);
     setCacheMode(DeviceCoordinateCache);
 }
 

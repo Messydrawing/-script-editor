@@ -1,20 +1,39 @@
 #pragma once
 
-#include <QGraphicsLineItem>
+#include <QGraphicsObject>
+#include <QPainterPath>
+#include <QString>
 
 class NodeItem;
 class Choice;
 
-class EdgeItem : public QGraphicsLineItem
+class EdgeItem : public QGraphicsObject
 {
+    Q_OBJECT
 public:
-    EdgeItem(NodeItem *source, NodeItem *target, Choice *choice = nullptr, QGraphicsItem *parent = nullptr);
+    EdgeItem(NodeItem *source, NodeItem *target, const QString &choiceId, QGraphicsItem *parent = nullptr);
 
     void updatePosition();
-    Choice *choice() const { return m_choice; }
+    QRectF boundingRect() const override { return m_boundingRect; }
+    void paint(QPainter *painter, const QStyleOptionGraphicsItem *option, QWidget *widget = nullptr) override;
+
+    NodeItem *sourceItem() const { return m_source; }
+    NodeItem *targetItem() const { return m_target; }
+    QString choiceId() const { return m_choiceId; }
+
+    void setLabelText(const QString &text);
+
+signals:
+    void labelEdited(const QString &choiceId, const QString &text);
 
 private:
+    void updateLabelPosition();
+
     NodeItem *m_source{nullptr};
     NodeItem *m_target{nullptr};
-    Choice *m_choice{nullptr};
+    QString m_choiceId;
+    QPainterPath m_path;
+    QRectF m_boundingRect;
+    class EditableLabelItem *m_label{nullptr};
+    bool m_ignoreLabelSignal{false};
 };
