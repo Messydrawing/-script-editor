@@ -2,6 +2,7 @@
 
 #include <QDialog>
 
+class QDialogButtonBox;
 class QTextEdit;
 class StoryNode;
 
