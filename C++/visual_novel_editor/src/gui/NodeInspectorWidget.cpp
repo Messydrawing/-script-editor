@@ -5,6 +5,7 @@
 #include <QColor>
 #include <QColorDialog>
 #include <QComboBox>
+#include <QEvent>
 #include <QFont>
 #include <QFontDatabase>
 #include <QFormLayout>
@@ -34,20 +35,20 @@ NodeInspectorWidget::NodeInspectorWidget(QWidget *parent)
     mainLayout->setSpacing(8);
 
     auto *headerLayout = new QHBoxLayout;
-    auto *titleLabel = new QLabel(tr("Node Inspector"), this);
-    titleLabel->setStyleSheet(QStringLiteral("font-weight: bold;"));
-    headerLayout->addWidget(titleLabel);
+    m_headerLabel = new QLabel(this);
+    m_headerLabel->setStyleSheet(QStringLiteral("font-weight: bold;"));
+    headerLayout->addWidget(m_headerLabel);
     headerLayout->addStretch();
     m_expandButton = new QToolButton(this);
     m_expandButton->setCheckable(true);
     m_expandButton->setAutoRaise(true);
-    m_expandButton->setToolTip(tr("Expand inspector to full window"));
     m_expandButton->setText(QStringLiteral("⤢"));
     headerLayout->addWidget(m_expandButton);
     mainLayout->addLayout(headerLayout);
 
     auto *formLayout = new QFormLayout;
-    formLayout->addRow(tr("Title"), m_titleEdit);
+    m_titleLabel = new QLabel(this);
+    formLayout->addRow(m_titleLabel, m_titleEdit);
     mainLayout->addLayout(formLayout);
 
     m_formatToolbar = new QToolBar(this);
@@ -55,19 +56,19 @@ NodeInspectorWidget::NodeInspectorWidget(QWidget *parent)
     m_formatToolbar->setMovable(false);
     m_formatToolbar->setFloatable(false);
 
-    m_boldAction = m_formatToolbar->addAction(tr("B"));
+    m_boldAction = m_formatToolbar->addAction(QString());
     QFont boldFont = font();
     boldFont.setBold(true);
     m_boldAction->setFont(boldFont);
     m_boldAction->setCheckable(true);
 
-    m_italicAction = m_formatToolbar->addAction(tr("I"));
+    m_italicAction = m_formatToolbar->addAction(QString());
     QFont italicFont = font();
     italicFont.setItalic(true);
     m_italicAction->setFont(italicFont);
     m_italicAction->setCheckable(true);
 
-    m_underlineAction = m_formatToolbar->addAction(tr("U"));
+    m_underlineAction = m_formatToolbar->addAction(QString());
     QFont underlineFont = font();
     underlineFont.setUnderline(true);
     m_underlineAction->setFont(underlineFont);
@@ -76,7 +77,6 @@ NodeInspectorWidget::NodeInspectorWidget(QWidget *parent)
     m_formatToolbar->addSeparator();
 
     m_colorButton = new QToolButton(this);
-    m_colorButton->setText(tr("Color"));
     m_colorButton->setAutoRaise(true);
     m_formatToolbar->addWidget(m_colorButton);
 
@@ -108,6 +108,8 @@ NodeInspectorWidget::NodeInspectorWidget(QWidget *parent)
     connect(m_colorButton, &QToolButton::clicked, this, &NodeInspectorWidget::chooseTextColor);
 
     m_scriptEdit->setAcceptRichText(true);
+
+    retranslateUi();
 }
 
 void NodeInspectorWidget::setNode(StoryNode *node)
@@ -246,13 +248,10 @@ void NodeInspectorWidget::updateExpandButtonAppearance()
     if (!m_expandButton) {
         return;
     }
-    if (m_isExpanded) {
-        m_expandButton->setText(QStringLiteral("⤺"));
-        m_expandButton->setToolTip(tr("Restore inspector to sidebar"));
-    } else {
-        m_expandButton->setText(QStringLiteral("⤢"));
-        m_expandButton->setToolTip(tr("Expand inspector to full window"));
-    }
+    m_expandButton->setText(m_isExpanded ? QStringLiteral("⤡") : QStringLiteral("⤢"));
+    const QString tooltip = m_isExpanded ? tr("Restore inspector to sidebar")
+                                         : tr("Expand inspector to full window");
+    m_expandButton->setToolTip(tooltip);
 }
 
 void NodeInspectorWidget::mergeFormatOnSelection(const QTextCharFormat &format)
@@ -301,4 +300,35 @@ void NodeInspectorWidget::updateFormatControls(const QTextCharFormat &format)
     }
 
     m_blockFormatSignals = false;
+}
+
+void NodeInspectorWidget::changeEvent(QEvent *event)
+{
+    if (event->type() == QEvent::LanguageChange) {
+        retranslateUi();
+    }
+    QWidget::changeEvent(event);
+}
+
+void NodeInspectorWidget::retranslateUi()
+{
+    if (m_headerLabel) {
+        m_headerLabel->setText(tr("Node Inspector"));
+    }
+    if (m_titleLabel) {
+        m_titleLabel->setText(tr("Title"));
+    }
+    if (m_boldAction) {
+        m_boldAction->setText(tr("B"));
+    }
+    if (m_italicAction) {
+        m_italicAction->setText(tr("I"));
+    }
+    if (m_underlineAction) {
+        m_underlineAction->setText(tr("U"));
+    }
+    if (m_colorButton) {
+        m_colorButton->setText(tr("Color"));
+    }
+    updateExpandButtonAppearance();
 }

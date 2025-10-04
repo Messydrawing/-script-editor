@@ -13,8 +13,12 @@ public:
 
 protected:
     void accept() override;
+    void changeEvent(QEvent *event) override;
 
 private:
+    void retranslateUi();
+
     StoryNode *m_node{nullptr};
     QTextEdit *m_editor{nullptr};
+    QDialogButtonBox *m_buttonBox{nullptr};
 };

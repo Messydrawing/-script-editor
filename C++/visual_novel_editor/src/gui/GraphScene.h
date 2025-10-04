@@ -25,6 +25,7 @@ public:
 
 signals:
     void nodeSelected(const QString &nodeId);
+    void nodeDoubleClicked(const QString &nodeId);
 
 protected:
     void mousePressEvent(QGraphicsSceneMouseEvent *event) override;
