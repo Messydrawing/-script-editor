@@ -4,19 +4,21 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Optional
 
-from PySide6.QtCore import QPointF
+from PySide6.QtCore import QPointF, Qt
 from PySide6.QtGui import QAction, QActionGroup, QUndoStack
 from PySide6.QtWidgets import (
     QFileDialog,
     QInputDialog,
     QMainWindow,
     QMessageBox,
+    QDockWidget,
     QToolBar,
+    QUndoView,
 )
 
 from gui.scene_view import GraphMode, GraphScene, GraphView
 from model.project_io import ProjectIO
-from model.undo_commands import AddNodeCommand
+from src.gui.commands import AddNodeCommand, DeleteItemsCommand
 
 
 class MainWindow(QMainWindow):
@@ -27,10 +29,6 @@ class MainWindow(QMainWindow):
         self.setWindowTitle("Visual Novel Script Editor")
         self.resize(1200, 800)
 
-        self.scene = GraphScene(self)
-        self.view = GraphView(self.scene, self)
-        self.setCentralWidget(self.view)
-
         self.docs_dir = Path("docs")
         self.docs_dir.mkdir(exist_ok=True)
 
@@ -38,6 +36,13 @@ class MainWindow(QMainWindow):
         self._next_node_id = 1
 
         self.undo_stack = QUndoStack(self)
+
+        self.scene = GraphScene(self)
+        self.scene.set_undo_stack(self.undo_stack)
+        self.view = GraphView(self.scene, self)
+        self.setCentralWidget(self.view)
+
+        self.undo_stack.indexChanged.connect(self._refresh_scene_state)
 
         self._create_actions()
         self._create_menus()
@@ -87,6 +92,11 @@ class MainWindow(QMainWindow):
         self.redo_action = self.undo_stack.createRedoAction(self, "Redo")
         self.redo_action.setShortcut("Ctrl+Y")
 
+        self.toggle_history_action = QAction("History", self)
+        self.toggle_history_action.setCheckable(True)
+        self.toggle_history_action.setChecked(False)
+        self.toggle_history_action.triggered.connect(self._toggle_history_dock)
+
     def _create_menus(self) -> None:
         file_menu = self.menuBar().addMenu("&File")
         file_menu.addAction(self.new_project_action)
@@ -103,6 +113,8 @@ class MainWindow(QMainWindow):
         edit_menu.addSeparator()
         edit_menu.addAction(self.add_node_action)
         edit_menu.addAction(self.delete_selection_action)
+        edit_menu.addSeparator()
+        edit_menu.addAction(self.toggle_history_action)
 
         mode_menu = self.menuBar().addMenu("&Mode")
         mode_menu.addAction(self.pointer_mode_action)
@@ -117,7 +129,17 @@ class MainWindow(QMainWindow):
         toolbar.addSeparator()
         toolbar.addAction(self.undo_action)
         toolbar.addAction(self.redo_action)
+        toolbar.addAction(self.toggle_history_action)
         self.addToolBar(toolbar)
+
+        self.history_dock = QDockWidget("History", self)
+        self.history_dock.setAllowedAreas(Qt.LeftDockWidgetArea | Qt.RightDockWidgetArea)
+        self.history_view = QUndoView(self.undo_stack, self.history_dock)
+        self.history_view.setEmptyLabel("Nothing to undo")
+        self.history_dock.setWidget(self.history_view)
+        self.addDockWidget(Qt.RightDockWidgetArea, self.history_dock)
+        self.history_dock.visibilityChanged.connect(self.toggle_history_action.setChecked)
+        self.history_dock.hide()
 
     # ------------------------------------------------------------------
     def _set_mode(self, mode: GraphMode) -> None:
@@ -149,9 +171,16 @@ class MainWindow(QMainWindow):
         if not self.scene.selectedItems():
             QMessageBox.information(self, "Delete", "No items selected.")
             return
-        for item in list(self.scene.selectedItems()):
-            self.scene.remove_item(item)
+        command = DeleteItemsCommand(self.scene, list(self.scene.selectedItems()))
+        self.undo_stack.push(command)
         self.statusBar().showMessage("Selection deleted", 3000)
+
+    def _refresh_scene_state(self) -> None:
+        self.scene.update()
+        self.view.viewport().update()
+
+    def _toggle_history_dock(self, visible: bool) -> None:
+        self.history_dock.setVisible(visible)
 
     def new_project(self) -> None:
         self.scene.clear()
