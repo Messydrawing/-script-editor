@@ -20,7 +20,10 @@ add_library(GuiLib STATIC ${GUI_SOURCES} ${GUI_HEADERS} ${GUI_RESOURCES})
 
 set_target_properties(GuiLib PROPERTIES AUTOMOC ON AUTORCC ON)
 
-target_include_directories(GuiLib PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
+target_include_directories(GuiLib
+    PUBLIC
+        ${CMAKE_CURRENT_SOURCE_DIR}
+        ${CMAKE_CURRENT_SOURCE_DIR}/..)
 
 target_link_libraries(GuiLib
     PUBLIC ModelLib
