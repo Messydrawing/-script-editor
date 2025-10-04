@@ -92,6 +92,7 @@ void GraphScene::contextMenuEvent(QGraphicsSceneContextMenuEvent *event)
     }
 
     QMenu menu;
+    QAction *addNodeAction = nullptr;
     if (nodeItem && !nodeItem->isSelected()) {
         clearSelection();
         nodeItem->setSelected(true);
@@ -120,15 +121,30 @@ void GraphScene::contextMenuEvent(QGraphicsSceneContextMenuEvent *event)
     } else if (edgeItem) {
         deleteAction = menu.addAction(tr("Delete"));
     } else {
+        addNodeAction = menu.addAction(tr("Add Node"));
+    }
+
+    if (menu.isEmpty()) {
+        event->accept();
         return;
     }
 
     QAction *chosen = menu.exec(event->screenPos());
     if (!chosen) {
+        event->accept();
         return;
     }
 
-    if (chosen == copyAction) {
+    if (chosen == addNodeAction) {
+        const QString newId = createNode(scenePos);
+        if (!newId.isEmpty()) {
+            if (NodeItem *created = m_nodeItems.value(newId, nullptr)) {
+                clearSelection();
+                created->setSelected(true);
+            }
+            emit nodeSelected(newId);
+        }
+    } else if (chosen == copyAction) {
         copySelection();
     } else if (chosen == cutAction) {
         deleteSelectionItems();
@@ -137,6 +153,8 @@ void GraphScene::contextMenuEvent(QGraphicsSceneContextMenuEvent *event)
     } else if (chosen == branchAction) {
         startBranch(nodeItem);
     }
+
+    event->accept();
 }
 
 void GraphScene::rebuild()
@@ -177,9 +195,17 @@ NodeItem *GraphScene::createNodeItem(StoryNode *node)
 
 void GraphScene::connectNodeItem(NodeItem *item)
 {
+    if (!item) {
+        return;
+    }
     connect(item, &NodeItem::positionChanged, this, [this](const QString &id, const QPointF &) {
         if (NodeItem *sourceItem = m_nodeItems.value(id, nullptr)) {
             updateEdgesForNode(sourceItem);
+        }
+    });
+    connect(item, &NodeItem::doubleClicked, this, [this](const QString &id) {
+        if (!id.isEmpty()) {
+            emit nodeDoubleClicked(id);
         }
     });
 }

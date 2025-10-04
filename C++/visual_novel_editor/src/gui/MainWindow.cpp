@@ -1,10 +1,13 @@
 #include "MainWindow.h"
 
 #include <QAction>
+#include <QActionGroup>
 #include <QDockWidget>
+#include <QEvent>
 #include <QFileDialog>
 #include <QGraphicsItem>
 #include <QGraphicsView>
+#include <QMenu>
 #include <QMenuBar>
 #include <QMessageBox>
 #include <QStatusBar>
@@ -25,7 +28,13 @@ MainWindow::MainWindow(QWidget *parent)
     createMenus();
     createToolbars();
     setupScene();
-    statusBar()->showMessage(tr("Ready"));
+    updateLanguageMenuState();
+    retranslateUi();
+    setStatusMessage(QStringLiteral("Ready"));
+
+    connect(&LanguageManager::instance(), &LanguageManager::languageChanged, this, [this](LanguageManager::Language) {
+        updateLanguageMenuState();
+    });
 }
 
 MainWindow::~MainWindow() = default;
@@ -40,37 +49,61 @@ void MainWindow::setProject(Project *project)
 
 void MainWindow::createMenus()
 {
-    QMenu *fileMenu = menuBar()->addMenu(tr("&File"));
-    QAction *newAction = fileMenu->addAction(tr("&New"), this, &MainWindow::newProject);
-    newAction->setShortcut(QKeySequence::New);
-    QAction *openAction = fileMenu->addAction(tr("&Open"), this, &MainWindow::openProject);
-    openAction->setShortcut(QKeySequence::Open);
-    QAction *saveAction = fileMenu->addAction(tr("&Save"), this, &MainWindow::saveProject);
-    saveAction->setShortcut(QKeySequence::Save);
-    fileMenu->addSeparator();
-    fileMenu->addAction(tr("E&xit"), this, &QWidget::close);
+    m_fileMenu = menuBar()->addMenu(QString());
+    m_newAction = m_fileMenu->addAction(QString(), this, &MainWindow::newProject);
+    m_newAction->setShortcut(QKeySequence::New);
+    m_openAction = m_fileMenu->addAction(QString(), this, &MainWindow::openProject);
+    m_openAction->setShortcut(QKeySequence::Open);
+    m_saveAction = m_fileMenu->addAction(QString(), this, &MainWindow::saveProject);
+    m_saveAction->setShortcut(QKeySequence::Save);
+    m_fileMenu->addSeparator();
+    m_exitAction = m_fileMenu->addAction(QString(), this, &QWidget::close);
 
-    QMenu *editMenu = menuBar()->addMenu(tr("&Edit"));
-    editMenu->addAction(tr("Add Node"), this, &MainWindow::addNode);
-    editMenu->addAction(tr("Delete"), this, &MainWindow::deleteSelection);
-    editMenu->addAction(tr("Edit Script"), this, &MainWindow::editScript);
+    m_editMenu = menuBar()->addMenu(QString());
+    m_addNodeAction = m_editMenu->addAction(QString(), this, &MainWindow::addNode);
+    m_deleteAction = m_editMenu->addAction(QString(), this, &MainWindow::deleteSelection);
+    m_editScriptAction = m_editMenu->addAction(QString(), this, &MainWindow::editScript);
 
-    QMenu *exportMenu = menuBar()->addMenu(tr("&Export"));
-    exportMenu->addAction(tr("Export to Ren'Py"), this, &MainWindow::exportToRenpy);
+    m_exportMenu = menuBar()->addMenu(QString());
+    m_exportRenpyAction = m_exportMenu->addAction(QString(), this, &MainWindow::exportToRenpy);
+
+    m_settingsMenu = menuBar()->addMenu(QString());
+    m_languageMenu = m_settingsMenu->addMenu(QString());
+
+    m_languageGroup = new QActionGroup(this);
+    m_languageGroup->setExclusive(true);
+
+    m_languageEnglishAction = m_languageMenu->addAction(QString());
+    m_languageEnglishAction->setCheckable(true);
+    m_languageChineseAction = m_languageMenu->addAction(QString());
+    m_languageChineseAction->setCheckable(true);
+
+    m_languageGroup->addAction(m_languageEnglishAction);
+    m_languageGroup->addAction(m_languageChineseAction);
+
+    connect(m_languageEnglishAction, &QAction::triggered, this, []() {
+        LanguageManager::instance().setLanguage(LanguageManager::Language::English);
+    });
+    connect(m_languageChineseAction, &QAction::triggered, this, []() {
+        LanguageManager::instance().setLanguage(LanguageManager::Language::Chinese);
+    });
 }
 
 void MainWindow::createToolbars()
 {
-    QToolBar *toolbar = addToolBar(tr("Tools"));
-    toolbar->addAction(tr("Add Node"), this, &MainWindow::addNode);
-    toolbar->addAction(tr("Edit Script"), this, &MainWindow::editScript);
-    toolbar->addAction(tr("Export"), this, &MainWindow::exportToRenpy);
+    m_mainToolbar = addToolBar(QString());
+    if (m_mainToolbar) {
+        m_mainToolbar->addAction(m_addNodeAction);
+        m_mainToolbar->addAction(m_editScriptAction);
+        m_mainToolbar->addAction(m_exportRenpyAction);
+    }
 }
 
 void MainWindow::setupScene()
 {
     m_scene = new GraphScene(this);
     connect(m_scene, &GraphScene::nodeSelected, this, &MainWindow::onNodeSelected);
+    connect(m_scene, &GraphScene::nodeDoubleClicked, this, &MainWindow::onNodeDoubleClicked);
 
     m_view = new QGraphicsView(m_scene, this);
     m_view->setRenderHint(QPainter::Antialiasing, true);
@@ -98,7 +131,7 @@ void MainWindow::newProject()
     m_project->clear();
     m_currentProjectFile.clear();
     m_scene->setProject(m_project);
-    statusBar()->showMessage(tr("Created new project"), 2000);
+    setStatusMessage(QStringLiteral("Created new project"), 2000);
 }
 
 void MainWindow::openProject()
@@ -118,7 +151,7 @@ void MainWindow::openProject()
     }
     m_currentProjectFile = fileName;
     m_scene->setProject(m_project);
-    statusBar()->showMessage(tr("Project loaded"), 2000);
+    setStatusMessage(QStringLiteral("Project loaded"), 2000);
 }
 
 void MainWindow::saveProject()
@@ -140,7 +173,7 @@ void MainWindow::saveProject()
         return;
     }
     m_currentProjectFile = fileName;
-    statusBar()->showMessage(tr("Project saved"), 2000);
+    setStatusMessage(QStringLiteral("Project saved"), 2000);
 }
 
 void MainWindow::addNode()
@@ -153,7 +186,7 @@ void MainWindow::addNode()
     node->setTitle(tr("Dialogue"));
     node->setScript(tr("# dialogue script"));
     m_scene->setProject(m_project);
-    statusBar()->showMessage(tr("Node added"), 1500);
+    setStatusMessage(QStringLiteral("Node added"), 1500);
 }
 
 void MainWindow::deleteSelection()
@@ -188,8 +221,7 @@ void MainWindow::editScript()
         return;
     }
 
-    ScriptEditorDialog dialog(nodeItem->storyNode(), this);
-    dialog.exec();
+    openScriptEditorForNode(nodeItem->storyNode());
 }
 
 void MainWindow::exportToRenpy()
@@ -207,7 +239,7 @@ void MainWindow::exportToRenpy()
     if (!exporter.exportToFile(fileName)) {
         QMessageBox::warning(this, tr("Export Failed"), tr("Could not export Ren'Py script."));
     } else {
-        statusBar()->showMessage(tr("Exported to Ren'Py"), 2000);
+        setStatusMessage(QStringLiteral("Exported to Ren'Py"), 2000);
     }
 }
 
@@ -267,4 +299,127 @@ void MainWindow::toggleInspectorExpanded(bool expanded)
 
     m_isInspectorExpanded = expanded;
     m_inspector->setExpanded(expanded);
+}
+
+void MainWindow::changeEvent(QEvent *event)
+{
+    if (event->type() == QEvent::LanguageChange) {
+        retranslateUi();
+        if (!m_lastStatusKey.isEmpty() && statusBar() && !statusBar()->currentMessage().isEmpty()) {
+            const QByteArray utf8 = m_lastStatusKey.toUtf8();
+            statusBar()->showMessage(tr(utf8.constData()), m_lastStatusTimeout);
+        }
+    }
+    QMainWindow::changeEvent(event);
+}
+
+void MainWindow::retranslateUi()
+{
+    if (m_fileMenu) {
+        m_fileMenu->setTitle(tr("&File"));
+    }
+    if (m_newAction) {
+        m_newAction->setText(tr("&New"));
+    }
+    if (m_openAction) {
+        m_openAction->setText(tr("&Open"));
+    }
+    if (m_saveAction) {
+        m_saveAction->setText(tr("&Save"));
+    }
+    if (m_exitAction) {
+        m_exitAction->setText(tr("E&xit"));
+    }
+
+    if (m_editMenu) {
+        m_editMenu->setTitle(tr("&Edit"));
+    }
+    if (m_addNodeAction) {
+        m_addNodeAction->setText(tr("Add Node"));
+    }
+    if (m_deleteAction) {
+        m_deleteAction->setText(tr("Delete"));
+    }
+    if (m_editScriptAction) {
+        m_editScriptAction->setText(tr("Edit Script"));
+    }
+
+    if (m_exportMenu) {
+        m_exportMenu->setTitle(tr("&Export"));
+    }
+    if (m_exportRenpyAction) {
+        m_exportRenpyAction->setText(tr("Export to Ren'Py"));
+    }
+
+    if (m_settingsMenu) {
+        m_settingsMenu->setTitle(tr("Settings"));
+    }
+    if (m_languageMenu) {
+        m_languageMenu->setTitle(tr("Language"));
+    }
+    if (m_languageEnglishAction) {
+        m_languageEnglishAction->setText(tr("English"));
+    }
+    if (m_languageChineseAction) {
+        m_languageChineseAction->setText(tr("Chinese"));
+    }
+
+    if (m_mainToolbar) {
+        m_mainToolbar->setWindowTitle(tr("Tools"));
+    }
+    if (m_inspectorDock) {
+        m_inspectorDock->setWindowTitle(tr("Inspector"));
+    }
+}
+
+void MainWindow::updateLanguageMenuState()
+{
+    const auto currentLanguage = LanguageManager::instance().language();
+    if (m_languageEnglishAction) {
+        m_languageEnglishAction->setChecked(currentLanguage == LanguageManager::Language::English);
+    }
+    if (m_languageChineseAction) {
+        m_languageChineseAction->setChecked(currentLanguage == LanguageManager::Language::Chinese);
+    }
+}
+
+void MainWindow::openScriptEditorForNode(StoryNode *node)
+{
+    if (!node) {
+        return;
+    }
+
+    ScriptEditorDialog dialog(node, this);
+    const int result = dialog.exec();
+    Q_UNUSED(result);
+
+    if (m_scene) {
+        m_scene->refreshNode(node->id());
+    }
+    if (m_inspector && m_project) {
+        if (StoryNode *updated = m_project->getNode(node->id())) {
+            m_inspector->setNode(updated);
+        }
+    }
+}
+
+void MainWindow::onNodeDoubleClicked(const QString &nodeId)
+{
+    if (!m_project) {
+        return;
+    }
+    if (StoryNode *node = m_project->getNode(nodeId)) {
+        openScriptEditorForNode(node);
+    }
+}
+
+void MainWindow::setStatusMessage(const QString &key, int timeoutMs)
+{
+    m_lastStatusKey = key;
+    m_lastStatusTimeout = timeoutMs;
+    if (!statusBar() || key.isEmpty()) {
+        return;
+    }
+    const QByteArray utf8 = key.toUtf8();
+    statusBar()->showMessage(tr(utf8.constData()), timeoutMs);
 }

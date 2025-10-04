@@ -7,6 +7,7 @@ class QAction;
 class QComboBox;
 class QToolBar;
 class QToolButton;
+class QLabel;
 
 class QLineEdit;
 class QTextEdit;
@@ -37,11 +38,15 @@ private slots:
     void chooseTextColor();
     void onCurrentCharFormatChanged(const QTextCharFormat &format);
 
+protected:
+    void changeEvent(QEvent *event) override;
+
 private:
     void refresh();
     void updateExpandButtonAppearance();
     void mergeFormatOnSelection(const QTextCharFormat &format);
     void updateFormatControls(const QTextCharFormat &format);
+    void retranslateUi();
 
     StoryNode *m_node{nullptr};
     QLineEdit *m_titleEdit{nullptr};
@@ -53,6 +58,8 @@ private:
     QAction *m_underlineAction{nullptr};
     QComboBox *m_fontSizeCombo{nullptr};
     QToolButton *m_colorButton{nullptr};
+    QLabel *m_headerLabel{nullptr};
+    QLabel *m_titleLabel{nullptr};
     bool m_isExpanded{false};
     bool m_blockFormatSignals{false};
 };
