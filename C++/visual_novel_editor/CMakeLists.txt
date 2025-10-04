@@ -12,6 +12,10 @@ add_subdirectory(src/export)
 
 add_executable(visual_novel_editor src/main.cpp)
 
+target_include_directories(visual_novel_editor
+    PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/src)
+
 target_link_libraries(visual_novel_editor
     PRIVATE
         GuiLib
