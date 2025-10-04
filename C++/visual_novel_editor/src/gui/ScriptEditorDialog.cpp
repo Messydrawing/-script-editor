@@ -3,6 +3,7 @@
 #include <QDialogButtonBox>
 #include <QTextEdit>
 #include <QVBoxLayout>
+#include <Qt>
 
 #include "model/StoryNode.h"
 
@@ -22,14 +23,19 @@ ScriptEditorDialog::ScriptEditorDialog(StoryNode *node, QWidget *parent)
     connect(buttonBox, &QDialogButtonBox::rejected, this, &ScriptEditorDialog::reject);
 
     if (m_node) {
-        m_editor->setPlainText(m_node->script());
+        const QString script = m_node->script();
+        if (Qt::mightBeRichText(script)) {
+            m_editor->setHtml(script);
+        } else {
+            m_editor->setPlainText(script);
+        }
     }
 }
 
 void ScriptEditorDialog::accept()
 {
     if (m_node) {
-        m_node->setScript(m_editor->toPlainText());
+        m_node->setScript(m_editor->toHtml());
     }
     QDialog::accept();
 }
