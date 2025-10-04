@@ -1,11 +1,10 @@
 #pragma once
 
 #include <QObject>
+#include <QTranslator>
 #include <memory>
 
 class QCoreApplication;
-
-class InlineTranslator;
 
 class LanguageManager : public QObject
 {
@@ -30,7 +29,7 @@ private:
     LanguageManager();
 
     QCoreApplication *m_app{nullptr};
-    std::unique_ptr<InlineTranslator> m_chineseTranslator;
+    std::unique_ptr<QTranslator> m_chineseTranslator;
     Language m_language{Language::English};
 };
 
