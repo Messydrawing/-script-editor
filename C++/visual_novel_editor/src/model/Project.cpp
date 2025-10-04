@@ -12,29 +12,26 @@ Project::Project(QObject *parent)
 {
 }
 
-Project::~Project()
-{
-    qDeleteAll(m_nodes);
-    m_nodes.clear();
-}
-
 StoryNode *Project::addNode(StoryNode::Type type)
 {
-    auto *node = new StoryNode(generateId());
+    auto node = std::make_unique<StoryNode>(generateId());
     node->setType(type);
     node->setTitle(QStringLiteral("New Node"));
-    m_nodes.insert(node->id(), node);
+    StoryNode *nodePtr = node.get();
+    m_nodes.insert(node->id(), std::move(node));
     emit changed();
-    return node;
+    return nodePtr;
 }
 
 void Project::removeNode(const QString &nodeId)
 {
-    if (StoryNode *node = m_nodes.take(nodeId)) {
-        delete node;
-    }
+    m_nodes.remove(nodeId);
 
-    for (StoryNode *otherNode : m_nodes) {
+    for (auto it = m_nodes.begin(); it != m_nodes.end(); ++it) {
+        StoryNode *otherNode = it.value().get();
+        if (!otherNode) {
+            continue;
+        }
         auto &choices = otherNode->choices();
         for (int i = choices.size() - 1; i >= 0; --i) {
             if (choices[i].targetNodeId == nodeId) {
@@ -47,19 +44,24 @@ void Project::removeNode(const QString &nodeId)
 
 void Project::clear()
 {
-    qDeleteAll(m_nodes);
     m_nodes.clear();
     emit changed();
 }
 
 StoryNode *Project::getNode(const QString &nodeId)
 {
-    return m_nodes.value(nodeId, nullptr);
+    if (auto it = m_nodes.find(nodeId); it != m_nodes.end()) {
+        return it.value().get();
+    }
+    return nullptr;
 }
 
 const StoryNode *Project::getNode(const QString &nodeId) const
 {
-    return m_nodes.value(nodeId, nullptr);
+    if (auto it = m_nodes.constFind(nodeId); it != m_nodes.cend()) {
+        return it.value().get();
+    }
+    return nullptr;
 }
 
 bool Project::loadFromFile(const QString &fileName)
@@ -101,8 +103,11 @@ QJsonObject Project::toJson() const
 {
     QJsonObject root;
     QJsonArray nodesArray;
-    for (const StoryNode *node : m_nodes) {
-        nodesArray.append(node->toJson());
+    for (auto it = m_nodes.cbegin(); it != m_nodes.cend(); ++it) {
+        const StoryNode *node = it.value().get();
+        if (node) {
+            nodesArray.append(node->toJson());
+        }
     }
     root[QStringLiteral("nodes")] = nodesArray;
     return root;
@@ -115,7 +120,7 @@ void Project::fromJson(const QJsonObject &json)
     const QJsonArray nodesArray = json.value(QStringLiteral("nodes")).toArray();
     for (const QJsonValue &value : nodesArray) {
         const StoryNode node = StoryNode::fromJson(value.toObject());
-        auto *nodePtr = new StoryNode(node);
-        m_nodes.insert(nodePtr->id(), nodePtr);
+        auto nodePtr = std::make_unique<StoryNode>(node);
+        m_nodes.insert(nodePtr->id(), std::move(nodePtr));
     }
 }
