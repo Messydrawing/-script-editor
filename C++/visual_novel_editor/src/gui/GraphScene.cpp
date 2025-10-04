@@ -62,7 +62,7 @@ void GraphScene::mousePressEvent(QGraphicsSceneMouseEvent *event)
 {
     if (event->button() == Qt::LeftButton && m_pendingBranchSource) {
         if (NodeItem *targetItem = qgraphicsitem_cast<NodeItem *>(itemAt(event->scenePos(), QTransform()))) {
-            if (targetItem != m_pendingBranchSource) {
+            if (targetItem != m_pendingBranchSource.data()) {
                 finalizeBranch(targetItem);
             }
             m_pendingBranchSource = nullptr;
@@ -138,7 +138,7 @@ void GraphScene::contextMenuEvent(QGraphicsSceneContextMenuEvent *event)
     if (chosen == addNodeAction) {
         const QString newId = createNode(scenePos);
         if (!newId.isEmpty()) {
-            if (NodeItem *created = m_nodeItems.value(newId, nullptr)) {
+            if (NodeItem *created = m_nodeItems.value(newId).data()) {
                 clearSelection();
                 created->setSelected(true);
             }
@@ -184,7 +184,7 @@ void GraphScene::rebuild()
 
 void GraphScene::refreshNode(const QString &nodeId)
 {
-    if (NodeItem *item = m_nodeItems.value(nodeId, nullptr)) {
+    if (NodeItem *item = m_nodeItems.value(nodeId).data()) {
         item->update();
         updateEdgesForNode(item);
     }
@@ -193,6 +193,7 @@ void GraphScene::refreshNode(const QString &nodeId)
 NodeItem *GraphScene::createNodeItem(StoryNode *node)
 {
     auto *item = new NodeItem(node);
+    item->setParent(this);
     connectNodeItem(item);
     return item;
 }
@@ -203,7 +204,7 @@ void GraphScene::connectNodeItem(NodeItem *item)
         return;
     }
     connect(item, &NodeItem::positionChanged, this, [this](const QString &id, const QPointF &) {
-        if (NodeItem *sourceItem = m_nodeItems.value(id, nullptr)) {
+        if (NodeItem *sourceItem = m_nodeItems.value(id).data()) {
             updateEdgesForNode(sourceItem);
         }
     });
@@ -226,16 +227,17 @@ void GraphScene::rebuildEdges()
         if (!node) {
             continue;
         }
-        NodeItem *sourceItem = m_nodeItems.value(node->id(), nullptr);
+        NodeItem *sourceItem = m_nodeItems.value(node->id()).data();
         if (!sourceItem) {
             continue;
         }
         for (const Choice &choice : node->choices()) {
-            NodeItem *targetItem = m_nodeItems.value(choice.targetNodeId, nullptr);
+            NodeItem *targetItem = m_nodeItems.value(choice.targetNodeId).data();
             if (!targetItem) {
                 continue;
             }
             auto *edge = new EdgeItem(sourceItem, targetItem, choice.id);
+            edge->setParent(this);
             addItem(edge);
             edge->setLabelText(choice.text);
             edge->updatePosition();
@@ -248,12 +250,11 @@ void GraphScene::rebuildEdges()
 
 void GraphScene::updateEdgesForNode(NodeItem *item)
 {
-    for (EdgeItem *edge : m_edgeItems) {
-        if (!edge) {
-            continue;
-        }
-        if (edge->sourceItem() == item || edge->targetItem() == item) {
-            edge->updatePosition();
+    for (const QPointer<EdgeItem> &edgePtr : m_edgeItems) {
+        if (EdgeItem *edge = edgePtr.data()) {
+            if (edge->sourceItem() == item || edge->targetItem() == item) {
+                edge->updatePosition();
+            }
         }
     }
     updateBoundingForAllEdges();
@@ -261,9 +262,11 @@ void GraphScene::updateEdgesForNode(NodeItem *item)
 
 void GraphScene::clearEdges()
 {
-    for (EdgeItem *edge : m_edgeItems) {
-        removeItem(edge);
-        delete edge;
+    for (const QPointer<EdgeItem> &edgePtr : m_edgeItems) {
+        if (EdgeItem *edge = edgePtr.data()) {
+            removeItem(edge);
+            edge->deleteLater();
+        }
     }
     m_edgeItems.clear();
 }
@@ -275,10 +278,11 @@ void GraphScene::startBranch(NodeItem *source)
 
 void GraphScene::finalizeBranch(NodeItem *target)
 {
-    if (!m_project || !m_pendingBranchSource || !target) {
+    NodeItem *sourceItem = m_pendingBranchSource.data();
+    if (!m_project || !sourceItem || !target) {
         return;
     }
-    StoryNode *sourceNode = m_pendingBranchSource->storyNode();
+    StoryNode *sourceNode = sourceItem->storyNode();
     StoryNode *targetNode = target->storyNode();
     if (!sourceNode || !targetNode || sourceNode == targetNode) {
         return;
@@ -460,8 +464,8 @@ void GraphScene::updateChoiceText(const QString &choiceId, const QString &text)
 
 void GraphScene::updateBoundingForAllEdges()
 {
-    for (EdgeItem *edge : m_edgeItems) {
-        if (edge) {
+    for (const QPointer<EdgeItem> &edgePtr : m_edgeItems) {
+        if (EdgeItem *edge = edgePtr.data()) {
             edge->update();
         }
     }

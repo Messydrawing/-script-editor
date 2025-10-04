@@ -3,6 +3,7 @@
 #include <QGraphicsScene>
 #include <QHash>
 #include <QList>
+#include <QPointer>
 #include <QPointF>
 #include <QString>
 
@@ -51,7 +52,7 @@ private:
     void rebuild();
 
     Project *m_project{nullptr};
-    QHash<QString, NodeItem *> m_nodeItems;
-    QList<EdgeItem *> m_edgeItems;
-    NodeItem *m_pendingBranchSource{nullptr};
+    QHash<QString, QPointer<NodeItem>> m_nodeItems;
+    QList<QPointer<EdgeItem>> m_edgeItems;
+    QPointer<NodeItem> m_pendingBranchSource;
 };
