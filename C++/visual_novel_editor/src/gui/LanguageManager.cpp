@@ -11,7 +11,9 @@ QString makeKey(const char *context, const char *sourceText)
     return QString::fromLatin1(context) + QLatin1Char('\004') + QString::fromUtf8(sourceText);
 }
 
-class InlineTranslator : public QTranslator
+} // namespace
+
+class LanguageManager::InlineTranslator : public QTranslator
 {
 public:
     InlineTranslator()
@@ -97,8 +99,6 @@ public:
 private:
     QHash<QString, QString> m_translations;
 };
-
-} // namespace
 
 LanguageManager &LanguageManager::instance()
 {
