@@ -168,7 +168,11 @@ void GraphScene::rebuild()
         return;
     }
 
-    for (StoryNode *node : m_project->nodes()) {
+    for (auto it = m_project->nodes().cbegin(); it != m_project->nodes().cend(); ++it) {
+        StoryNode *node = it.value().get();
+        if (!node) {
+            continue;
+        }
         NodeItem *item = createNodeItem(node);
         addItem(item);
         item->setPos(node->position());
@@ -217,7 +221,11 @@ void GraphScene::rebuildEdges()
         return;
     }
 
-    for (StoryNode *node : m_project->nodes()) {
+    for (auto it = m_project->nodes().cbegin(); it != m_project->nodes().cend(); ++it) {
+        StoryNode *node = it.value().get();
+        if (!node) {
+            continue;
+        }
         NodeItem *sourceItem = m_nodeItems.value(node->id(), nullptr);
         if (!sourceItem) {
             continue;
@@ -393,7 +401,11 @@ void GraphScene::deleteNodes(const QList<NodeItem *> &nodes)
 
     const QSet<QString> idSet(ids.cbegin(), ids.cend());
 
-    for (StoryNode *node : m_project->nodes()) {
+    for (auto it = m_project->nodes().cbegin(); it != m_project->nodes().cend(); ++it) {
+        StoryNode *node = it.value().get();
+        if (!node) {
+            continue;
+        }
         auto &choices = node->choices();
         for (int i = choices.size() - 1; i >= 0; --i) {
             if (idSet.contains(choices[i].targetNodeId)) {
@@ -412,7 +424,11 @@ Choice *GraphScene::findChoice(const QString &choiceId)
     if (!m_project) {
         return nullptr;
     }
-    for (StoryNode *node : m_project->nodes()) {
+    for (auto it = m_project->nodes().cbegin(); it != m_project->nodes().cend(); ++it) {
+        StoryNode *node = it.value().get();
+        if (!node) {
+            continue;
+        }
         auto &choices = node->choices();
         for (Choice &choice : choices) {
             if (choice.id == choiceId) {
