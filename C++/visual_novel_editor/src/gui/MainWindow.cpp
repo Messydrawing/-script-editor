@@ -9,6 +9,7 @@
 #include <QFileDialog>
 #include <QGraphicsItem>
 #include <QGraphicsView>
+#include <QIcon>
 #include <QMenu>
 #include <QMenuBar>
 #include <QMessageBox>
@@ -74,11 +75,17 @@ void MainWindow::createMenus()
 
     m_editMenu = menuBar()->addMenu(QString());
     m_addNodeAction = m_editMenu->addAction(QString(), this, &MainWindow::addNode);
+    m_addNodeAction->setIcon(QIcon(QStringLiteral(":/icons/add_node.svg")));
+    m_addNodeAction->setShortcut(QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_N));
     m_deleteAction = m_editMenu->addAction(QString(), this, &MainWindow::deleteSelection);
     m_editScriptAction = m_editMenu->addAction(QString(), this, &MainWindow::editScript);
+    m_editScriptAction->setIcon(QIcon(QStringLiteral(":/icons/edit_script.svg")));
+    m_editScriptAction->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_E));
 
     m_exportMenu = menuBar()->addMenu(QString());
     m_exportRenpyAction = m_exportMenu->addAction(QString(), this, &MainWindow::exportToRenpy);
+    m_exportRenpyAction->setIcon(QIcon(QStringLiteral(":/icons/export.svg")));
+    m_exportRenpyAction->setShortcut(QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_R));
 
     m_settingsMenu = menuBar()->addMenu(QString());
     m_languageMenu = m_settingsMenu->addMenu(QString());
@@ -318,12 +325,22 @@ void MainWindow::retranslateUi()
     }
     if (m_addNodeAction) {
         m_addNodeAction->setText(tr("Add Node"));
+        const QString shortcutText = m_addNodeAction->shortcut().toString(QKeySequence::NativeText);
+        const QString tip = shortcutText.isEmpty() ? tr("Create a new story node")
+                                                   : tr("Create a new story node (%1)").arg(shortcutText);
+        m_addNodeAction->setToolTip(tip);
+        m_addNodeAction->setStatusTip(tip);
     }
     if (m_deleteAction) {
         m_deleteAction->setText(tr("Delete"));
     }
     if (m_editScriptAction) {
         m_editScriptAction->setText(tr("Edit Script"));
+        const QString shortcutText = m_editScriptAction->shortcut().toString(QKeySequence::NativeText);
+        const QString tip = shortcutText.isEmpty() ? tr("Open the script editor for the selected node")
+                                                   : tr("Open the script editor for the selected node (%1)").arg(shortcutText);
+        m_editScriptAction->setToolTip(tip);
+        m_editScriptAction->setStatusTip(tip);
     }
 
     if (m_exportMenu) {
@@ -331,6 +348,11 @@ void MainWindow::retranslateUi()
     }
     if (m_exportRenpyAction) {
         m_exportRenpyAction->setText(tr("Export to Ren'Py"));
+        const QString shortcutText = m_exportRenpyAction->shortcut().toString(QKeySequence::NativeText);
+        const QString tip = shortcutText.isEmpty() ? tr("Generate a Ren'Py project from the current story")
+                                                   : tr("Generate a Ren'Py project from the current story (%1)").arg(shortcutText);
+        m_exportRenpyAction->setToolTip(tip);
+        m_exportRenpyAction->setStatusTip(tip);
     }
 
     if (m_settingsMenu) {

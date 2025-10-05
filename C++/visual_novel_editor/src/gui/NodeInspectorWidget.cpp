@@ -10,7 +10,9 @@
 #include <QFontDatabase>
 #include <QFormLayout>
 #include <QHBoxLayout>
+#include <QIcon>
 #include <QIntValidator>
+#include <QKeySequence>
 #include <QLabel>
 #include <QLineEdit>
 #include <QSignalBlocker>
@@ -18,6 +20,7 @@
 #include <QTextCharFormat>
 #include <QTextCursor>
 #include <QTextEdit>
+#include <QStyle>
 #include <QToolBar>
 #include <QToolButton>
 #include <QVBoxLayout>
@@ -42,7 +45,7 @@ NodeInspectorWidget::NodeInspectorWidget(QWidget *parent)
     m_expandButton = new QToolButton(this);
     m_expandButton->setCheckable(true);
     m_expandButton->setAutoRaise(true);
-    m_expandButton->setText(QStringLiteral("⤢"));
+    m_expandButton->setIconSize(QSize(16, 16));
     headerLayout->addWidget(m_expandButton);
     mainLayout->addLayout(headerLayout);
 
@@ -57,18 +60,27 @@ NodeInspectorWidget::NodeInspectorWidget(QWidget *parent)
     m_formatToolbar->setFloatable(false);
 
     m_boldAction = m_formatToolbar->addAction(QString());
+    m_boldAction->setIcon(QIcon(QStringLiteral(":/icons/text_bold.svg")));
+    m_boldAction->setShortcut(QKeySequence::Bold);
+    m_boldAction->setShortcutContext(Qt::WidgetWithChildrenShortcut);
     QFont boldFont = font();
     boldFont.setBold(true);
     m_boldAction->setFont(boldFont);
     m_boldAction->setCheckable(true);
 
     m_italicAction = m_formatToolbar->addAction(QString());
+    m_italicAction->setIcon(QIcon(QStringLiteral(":/icons/text_italic.svg")));
+    m_italicAction->setShortcut(QKeySequence::Italic);
+    m_italicAction->setShortcutContext(Qt::WidgetWithChildrenShortcut);
     QFont italicFont = font();
     italicFont.setItalic(true);
     m_italicAction->setFont(italicFont);
     m_italicAction->setCheckable(true);
 
     m_underlineAction = m_formatToolbar->addAction(QString());
+    m_underlineAction->setIcon(QIcon(QStringLiteral(":/icons/text_underline.svg")));
+    m_underlineAction->setShortcut(QKeySequence::Underline);
+    m_underlineAction->setShortcutContext(Qt::WidgetWithChildrenShortcut);
     QFont underlineFont = font();
     underlineFont.setUnderline(true);
     m_underlineAction->setFont(underlineFont);
@@ -77,6 +89,7 @@ NodeInspectorWidget::NodeInspectorWidget(QWidget *parent)
     m_formatToolbar->addSeparator();
 
     m_colorButton = new QToolButton(this);
+    m_colorButton->setIcon(QIcon(QStringLiteral(":/icons/palette.svg")));
     m_colorButton->setAutoRaise(true);
     m_formatToolbar->addWidget(m_colorButton);
 
@@ -248,10 +261,14 @@ void NodeInspectorWidget::updateExpandButtonAppearance()
     if (!m_expandButton) {
         return;
     }
-    m_expandButton->setText(m_isExpanded ? QStringLiteral("⤡") : QStringLiteral("⤢"));
+    m_expandButton->setIcon(style()->standardIcon(m_isExpanded ? QStyle::SP_TitleBarNormalButton
+                                                              : QStyle::SP_TitleBarMaxButton));
+    m_expandButton->setText(QString());
     const QString tooltip = m_isExpanded ? tr("Restore inspector to sidebar")
                                          : tr("Expand inspector to full window");
     m_expandButton->setToolTip(tooltip);
+    m_expandButton->setStatusTip(tooltip);
+    m_expandButton->setAccessibleName(tooltip);
 }
 
 void NodeInspectorWidget::mergeFormatOnSelection(const QTextCharFormat &format)
@@ -319,16 +336,35 @@ void NodeInspectorWidget::retranslateUi()
         m_titleLabel->setText(tr("Title"));
     }
     if (m_boldAction) {
-        m_boldAction->setText(tr("B"));
+        m_boldAction->setText(tr("Bold"));
+        const QString shortcutText = m_boldAction->shortcut().toString(QKeySequence::NativeText);
+        const QString tip = shortcutText.isEmpty() ? tr("Toggle bold formatting")
+                                                   : tr("Toggle bold formatting (%1)").arg(shortcutText);
+        m_boldAction->setToolTip(tip);
+        m_boldAction->setStatusTip(tip);
     }
     if (m_italicAction) {
-        m_italicAction->setText(tr("I"));
+        m_italicAction->setText(tr("Italic"));
+        const QString shortcutText = m_italicAction->shortcut().toString(QKeySequence::NativeText);
+        const QString tip = shortcutText.isEmpty() ? tr("Toggle italic formatting")
+                                                   : tr("Toggle italic formatting (%1)").arg(shortcutText);
+        m_italicAction->setToolTip(tip);
+        m_italicAction->setStatusTip(tip);
     }
     if (m_underlineAction) {
-        m_underlineAction->setText(tr("U"));
+        m_underlineAction->setText(tr("Underline"));
+        const QString shortcutText = m_underlineAction->shortcut().toString(QKeySequence::NativeText);
+        const QString tip = shortcutText.isEmpty() ? tr("Toggle underline formatting")
+                                                   : tr("Toggle underline formatting (%1)").arg(shortcutText);
+        m_underlineAction->setToolTip(tip);
+        m_underlineAction->setStatusTip(tip);
     }
     if (m_colorButton) {
         m_colorButton->setText(tr("Color"));
+        const QString tip = tr("Choose the text color");
+        m_colorButton->setToolTip(tip);
+        m_colorButton->setStatusTip(tip);
+        m_colorButton->setAccessibleName(tr("Text color"));
     }
     updateExpandButtonAppearance();
 }
