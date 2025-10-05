@@ -20,7 +20,7 @@ public:
 
     StoryNode *getNode(const QString &nodeId);
     const StoryNode *getNode(const QString &nodeId) const;
-    const QMap<QString, std::unique_ptr<StoryNode>> &nodes() const { return m_nodes; }
+    const QMap<QString, std::shared_ptr<StoryNode>> &nodes() const { return m_nodes; }
 
     [[nodiscard]] bool loadFromFile(const QString &fileName);
     [[nodiscard]] bool saveToFile(const QString &fileName) const;
@@ -31,7 +31,7 @@ signals:
     void changed();
 
 private:
-    QMap<QString, std::unique_ptr<StoryNode>> m_nodes;
+    QMap<QString, std::shared_ptr<StoryNode>> m_nodes;
 
     QJsonObject toJson() const;
     void fromJson(const QJsonObject &json);

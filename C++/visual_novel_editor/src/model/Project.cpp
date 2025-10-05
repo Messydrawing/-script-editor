@@ -14,11 +14,11 @@ Project::Project(QObject *parent)
 
 StoryNode *Project::addNode(StoryNode::Type type)
 {
-    auto node = std::make_unique<StoryNode>(generateId());
+    auto node = std::make_shared<StoryNode>(generateId());
     node->setType(type);
     node->setTitle(QStringLiteral("New Node"));
     StoryNode *nodePtr = node.get();
-    m_nodes.insert(node->id(), std::move(node));
+    m_nodes.insert(node->id(), node);
     emit changed();
     return nodePtr;
 }
@@ -120,7 +120,7 @@ void Project::fromJson(const QJsonObject &json)
     const QJsonArray nodesArray = json.value(QStringLiteral("nodes")).toArray();
     for (const QJsonValue &value : nodesArray) {
         const StoryNode node = StoryNode::fromJson(value.toObject());
-        auto nodePtr = std::make_unique<StoryNode>(node);
-        m_nodes.insert(nodePtr->id(), std::move(nodePtr));
+        auto nodePtr = std::make_shared<StoryNode>(node);
+        m_nodes.insert(nodePtr->id(), nodePtr);
     }
 }
