@@ -3,6 +3,8 @@
 #include <QString>
 #include <QWidget>
 
+#include "presenter/ViewInterfaces.h"
+
 class QAction;
 class QComboBox;
 class QToolBar;
@@ -14,14 +16,14 @@ class QTextEdit;
 class StoryNode;
 class QTextCharFormat;
 
-class NodeInspectorWidget : public QWidget
+class NodeInspectorWidget : public QWidget, public gui::presenter::INodeInspectorView
 {
     Q_OBJECT
 public:
     explicit NodeInspectorWidget(QWidget *parent = nullptr);
 
-    void setNode(StoryNode *node);
-    void setExpanded(bool expanded);
+    void setNode(StoryNode *node) override;
+    void setExpanded(bool expanded) override;
 
 signals:
     void nodeUpdated(const QString &nodeId);

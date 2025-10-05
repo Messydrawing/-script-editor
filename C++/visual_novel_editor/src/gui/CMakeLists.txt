@@ -5,7 +5,8 @@ set(GUI_SOURCES
     EdgeItem.cpp
     ScriptEditorDialog.cpp
     NodeInspectorWidget.cpp
-    LanguageManager.cpp)
+    LanguageManager.cpp
+    presenter/ProjectPresenter.cpp)
 
 set(GUI_HEADERS
     MainWindow.h
@@ -14,7 +15,9 @@ set(GUI_HEADERS
     EdgeItem.h
     ScriptEditorDialog.h
     NodeInspectorWidget.h
-    LanguageManager.h)
+    LanguageManager.h
+    presenter/ProjectPresenter.h
+    presenter/ViewInterfaces.h)
 
 qt6_add_resources(GUI_RESOURCES Icons.qrc)
 
