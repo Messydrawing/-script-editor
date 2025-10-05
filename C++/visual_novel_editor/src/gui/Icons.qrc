@@ -1,5 +1,11 @@
 <RCC>
     <qresource prefix="/icons">
-        <!-- Placeholder for future icon resources -->
+        <file alias="add_node.svg">../../../../resources/add_node.svg</file>
+        <file alias="edit_script.svg">../../../../resources/edit_script.svg</file>
+        <file alias="export.svg">../../../../resources/export.svg</file>
+        <file alias="text_bold.svg">../../../../resources/text_bold.svg</file>
+        <file alias="text_italic.svg">../../../../resources/text_italic.svg</file>
+        <file alias="text_underline.svg">../../../../resources/text_underline.svg</file>
+        <file alias="palette.svg">../../../../resources/palette.svg</file>
     </qresource>
 </RCC>
