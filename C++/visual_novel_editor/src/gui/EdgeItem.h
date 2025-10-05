@@ -19,6 +19,7 @@ public:
              QGraphicsItem *parent = nullptr);
 
     void updatePosition();
+    void setParallelInfo(int index, int total);
 
     QRectF boundingRect() const override { return m_boundingRect; }
     void paint(QPainter *painter,
@@ -46,4 +47,6 @@ private:
 
     QGraphicsTextItem *m_label{nullptr};  // ✅ 改为基类指针，消除不完全类型/二义性
     bool m_ignoreLabelSignal{false};
+    int m_parallelIndex{0};
+    int m_parallelCount{1};
 };

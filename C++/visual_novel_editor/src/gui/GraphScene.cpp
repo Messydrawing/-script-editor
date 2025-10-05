@@ -4,7 +4,9 @@
 #include <QGraphicsItem>
 #include <QGraphicsSceneContextMenuEvent>
 #include <QGraphicsSceneMouseEvent>
+#include <QHash>
 #include <QMenu>
+#include <QPair>
 #include <QStringList>
 #include <QSet>
 
@@ -237,6 +239,8 @@ void GraphScene::rebuildEdges()
         return;
     }
 
+    QHash<QPair<NodeItem *, NodeItem *>, QList<EdgeItem *>> groupedEdges;
+
     for (auto it = m_project->nodes().cbegin(); it != m_project->nodes().cend(); ++it) {
         StoryNode *node = it.value().get();
         if (!node) {
@@ -255,11 +259,22 @@ void GraphScene::rebuildEdges()
             edge->setParent(this);
             addItem(edge);
             edge->setLabelText(choice.text);
-            edge->updatePosition();
             connect(edge, &EdgeItem::labelEdited, this, &GraphScene::updateChoiceText);
             m_edgeItems.append(edge);
+            groupedEdges[qMakePair(sourceItem, targetItem)].append(edge);
         }
     }
+
+    for (auto it = groupedEdges.begin(); it != groupedEdges.end(); ++it) {
+        const QList<EdgeItem *> edges = it.value();
+        const int total = edges.size();
+        for (int index = 0; index < edges.size(); ++index) {
+            if (EdgeItem *edge = edges.at(index)) {
+                edge->setParallelInfo(index, total);
+            }
+        }
+    }
+
     updateBoundingForAllEdges();
 }
 

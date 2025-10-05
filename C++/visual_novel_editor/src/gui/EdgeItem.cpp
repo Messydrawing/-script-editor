@@ -8,6 +8,7 @@
 #include <QPen>
 #include <QTextDocument>
 #include <QtMath>
+#include <algorithm>
 #include <cmath>
 
 #include "NodeItem.h"
@@ -67,18 +68,6 @@ QPointF anchorForRect(const QRectF &rect, const QPointF &towards)
                : QPointF(center.x(), rect.top());
 }
 
-QPointF orthogonalCorner(const QPointF &start, const QPointF &end)
-{
-    if (qFuzzyCompare(start.x(), end.x()) || qFuzzyCompare(start.y(), end.y())) {
-        return QPointF((start.x() + end.x()) / 2.0,
-                       (start.y() + end.y()) / 2.0);
-    }
-    if (std::abs(start.x() - end.x()) >= std::abs(start.y() - end.y())) {
-        return QPointF(end.x(), start.y());
-    }
-    return QPointF(start.x(), end.y());
-}
-
 } // namespace
 
 EdgeItem::EdgeItem(NodeItem *source, NodeItem *target,
@@ -114,24 +103,56 @@ void EdgeItem::setLabelText(const QString &text)
     updateLabelPosition();
 }
 
+void EdgeItem::setParallelInfo(int index, int total)
+{
+    m_parallelIndex = std::max(0, index);
+    m_parallelCount = std::max(1, total);
+    updatePosition();
+}
+
 void EdgeItem::updatePosition()
 {
-    if (!m_source || !m_target) return;
+    if (!m_source || !m_target) {
+        return;
+    }
 
     const QRectF sourceRect = m_source->sceneBoundingRect();
     const QRectF targetRect = m_target->sceneBoundingRect();
 
-    const QPointF start  = anchorForRect(sourceRect, targetRect.center());
-    const QPointF end    = anchorForRect(targetRect, sourceRect.center());
-    const QPointF corner = orthogonalCorner(start, end);
+    const QPointF start = anchorForRect(sourceRect, targetRect.center());
+    const QPointF end = anchorForRect(targetRect, sourceRect.center());
 
     QPainterPath path(start);
-    if (!qFuzzyCompare(start.x(), corner.x()) ||
-        !qFuzzyCompare(start.y(), corner.y()))
-        path.lineTo(corner);
-    if (!qFuzzyCompare(corner.x(), end.x()) ||
-        !qFuzzyCompare(corner.y(), end.y()))
-        path.lineTo(end);
+
+    if (qFuzzyCompare(start.x(), end.x()) && qFuzzyCompare(start.y(), end.y())) {
+        const qreal baseRadius = 40.0;
+        const qreal spacing = 14.0;
+        const qreal radius = baseRadius + spacing * m_parallelIndex;
+        const QPointF controlOffset(radius, -radius);
+
+        const QPointF firstControl = start + QPointF(controlOffset.x(), 0.0);
+        const QPointF secondControl = start + QPointF(0.0, controlOffset.y());
+        const QPointF thirdControl = start + QPointF(-controlOffset.x(), 0.0);
+        const QPointF topPoint = start + QPointF(0.0, controlOffset.y());
+
+        path.cubicTo(firstControl, firstControl, topPoint);
+        path.cubicTo(secondControl, thirdControl, start);
+    } else {
+        const QPointF midPoint = (start + end) / 2.0;
+        QPointF direction = end - start;
+        const qreal length = std::hypot(direction.x(), direction.y());
+        QPointF controlPoint = midPoint;
+        if (!qFuzzyIsNull(length)) {
+            QPointF normal(-direction.y() / length, direction.x() / length);
+            const qreal spacing = 30.0;
+            const qreal offset = (m_parallelCount <= 1)
+                ? 0.0
+                : (static_cast<qreal>(m_parallelIndex)
+                   - static_cast<qreal>(m_parallelCount - 1) / 2.0) * spacing;
+            controlPoint += normal * offset;
+        }
+        path.quadTo(controlPoint, end);
+    }
 
     prepareGeometryChange();
     m_path = path;
