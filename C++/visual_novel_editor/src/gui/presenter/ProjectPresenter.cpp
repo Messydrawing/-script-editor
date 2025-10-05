@@ -1,6 +1,7 @@
 #include "ProjectPresenter.h"
 
 #include <QObject>
+#include <QStringList>
 
 #include "export/ExporterRenpy.h"
 #include "model/Project.h"
@@ -87,6 +88,10 @@ void ProjectPresenter::exportToRenpy()
         QStringLiteral("Cancel"));
 
     ExporterRenpy exporter(m_project);
+    const QStringList selectedNodeIds = m_graphSceneView.selectedNodeIds();
+    if (!selectedNodeIds.isEmpty()) {
+        exporter.setSelectedNodeIds(selectedNodeIds);
+    }
 
     exporter.setProgressCallback([&](int current, int total) {
         if (progressDialog) {
