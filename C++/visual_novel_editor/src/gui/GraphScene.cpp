@@ -30,6 +30,21 @@ void GraphScene::setProject(Project *project)
     rebuild();
 }
 
+QStringList GraphScene::selectedNodeIds() const
+{
+    QStringList ids;
+    const QList<QGraphicsItem *> selection = selectedItems();
+    ids.reserve(selection.size());
+    for (QGraphicsItem *item : selection) {
+        if (const auto *nodeItem = qgraphicsitem_cast<NodeItem *>(item)) {
+            if (const StoryNode *node = nodeItem->storyNode()) {
+                ids.append(node->id());
+            }
+        }
+    }
+    return ids;
+}
+
 QString GraphScene::createNode(const QPointF &pos)
 {
     if (!m_project) {

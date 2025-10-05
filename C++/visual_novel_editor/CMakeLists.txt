@@ -6,9 +6,13 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 find_package(Qt6 REQUIRED COMPONENTS Widgets)
 
+enable_testing()
+
 add_subdirectory(src/model)
 add_subdirectory(src/gui)
 add_subdirectory(src/export)
+
+add_subdirectory(tests)
 
 add_executable(visual_novel_editor src/main.cpp)
 

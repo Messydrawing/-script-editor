@@ -3,6 +3,10 @@
 #include <QMainWindow>
 #include <QString>
 
+#include <memory>
+
+#include "presenter/ProjectPresenter.h"
+
 #include "LanguageManager.h"
 
 class GraphScene;
@@ -16,7 +20,7 @@ class QToolBar;
 class QAction;
 class QActionGroup;
 
-class MainWindow : public QMainWindow
+class MainWindow : public QMainWindow, public gui::presenter::IMainWindowView
 {
     Q_OBJECT
 public:
@@ -49,6 +53,16 @@ private:
     void openScriptEditorForNode(StoryNode *node);
     void setStatusMessage(const QString &key, int timeoutMs = 0);
 
+    // gui::presenter::IMainWindowView overrides
+    QString promptSaveFile(const QString &titleKey, const QString &filterKey) override;
+    void showWarningMessage(const QString &titleKey, const QString &messageKey) override;
+    void displayStatusMessage(const QString &key, int timeoutMs) override;
+    void resetProjectFilePath() override;
+    std::unique_ptr<gui::presenter::IExportProgressView> createExportProgressDialog(const QString &titleKey,
+                                                                                    const QString &labelKey,
+                                                                                    const QString &cancelKey) override;
+    void processEvents() override;
+
     GraphScene *m_scene{nullptr};
     QGraphicsView *m_view{nullptr};
     NodeInspectorWidget *m_inspector{nullptr};
@@ -80,4 +94,6 @@ private:
 
     QString m_lastStatusKey;
     int m_lastStatusTimeout{0};
+
+    std::unique_ptr<gui::presenter::ProjectPresenter> m_presenter;
 };

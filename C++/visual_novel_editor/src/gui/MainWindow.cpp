@@ -12,19 +12,18 @@
 #include <QMenu>
 #include <QMenuBar>
 #include <QMessageBox>
-#include <QMetaObject>
 #include <QPointer>
 #include <QProgressDialog>
 #include <QStatusBar>
 #include <QToolBar>
-#include <QTimer>
 #include <QKeySequence>
+
+#include <memory>
 
 #include "GraphScene.h"
 #include "NodeInspectorWidget.h"
 #include "NodeItem.h"
 #include "ScriptEditorDialog.h"
-#include "export/ExporterRenpy.h"
 #include "model/Project.h"
 #include "model/StoryNode.h"
 
@@ -34,6 +33,12 @@ MainWindow::MainWindow(QWidget *parent)
     createMenus();
     createToolbars();
     setupScene();
+    if (m_scene && m_inspector) {
+        m_presenter = std::make_unique<gui::presenter::ProjectPresenter>(*this, *m_scene, *m_inspector);
+        if (m_project) {
+            m_presenter->setProject(m_project);
+        }
+    }
     updateLanguageMenuState();
     retranslateUi();
     setStatusMessage(QStringLiteral("Ready"));
@@ -48,7 +53,9 @@ MainWindow::~MainWindow() = default;
 void MainWindow::setProject(Project *project)
 {
     m_project = project;
-    if (m_scene) {
+    if (m_presenter) {
+        m_presenter->setProject(m_project);
+    } else if (m_scene) {
         m_scene->setProject(m_project);
     }
 }
@@ -131,13 +138,9 @@ void MainWindow::setupScene()
 
 void MainWindow::newProject()
 {
-    if (!m_project) {
-        return;
+    if (m_presenter) {
+        m_presenter->newProject();
     }
-    m_project->clear();
-    m_currentProjectFile.clear();
-    m_scene->setProject(m_project);
-    setStatusMessage(QStringLiteral("Created new project"), 2000);
 }
 
 void MainWindow::openProject()
@@ -184,31 +187,16 @@ void MainWindow::saveProject()
 
 void MainWindow::addNode()
 {
-    if (!m_project || !m_scene) {
-        return;
+    if (m_presenter) {
+        m_presenter->addNode();
     }
-
-    StoryNode *node = m_project->addNode(StoryNode::Type::Dialogue);
-    node->setTitle(tr("Dialogue"));
-    node->setScript(tr("# dialogue script"));
-    m_scene->setProject(m_project);
-    setStatusMessage(QStringLiteral("Node added"), 1500);
 }
 
 void MainWindow::deleteSelection()
 {
-    if (!m_project || !m_scene) {
-        return;
+    if (m_presenter) {
+        m_presenter->deleteSelection();
     }
-
-    const QList<QGraphicsItem *> selection = m_scene->selectedItems();
-    for (QGraphicsItem *item : selection) {
-        const auto *nodeItem = qgraphicsitem_cast<NodeItem *>(item);
-        if (nodeItem) {
-            m_project->removeNode(nodeItem->storyNode()->id());
-        }
-    }
-    m_scene->setProject(m_project);
 }
 
 void MainWindow::editScript()
@@ -232,70 +220,9 @@ void MainWindow::editScript()
 
 void MainWindow::exportToRenpy()
 {
-    if (!m_project) {
-        return;
+    if (m_presenter) {
+        m_presenter->exportToRenpy();
     }
-
-    const QString fileName = QFileDialog::getSaveFileName(this, tr("Export Ren'Py Script"), QString(), tr("Ren'Py Script (*.rpy)"));
-    if (fileName.isEmpty()) {
-        return;
-    }
-
-    auto progressDialog = QPointer<QProgressDialog>(new QProgressDialog(tr("Exporting Ren'Py script..."), tr("Cancel"), 0, 1, this));
-    progressDialog->setWindowTitle(tr("Exporting"));
-    progressDialog->setWindowModality(Qt::ApplicationModal);
-    progressDialog->setMinimumDuration(0);
-    progressDialog->setAutoClose(false);
-    progressDialog->setAutoReset(false);
-    progressDialog->show();
-
-    ExporterRenpy exporter(m_project);
-
-    exporter.setProgressCallback([progressDialog](int current, int total) {
-        if (!progressDialog) {
-            return false;
-        }
-
-        if (progressDialog->wasCanceled()) {
-            return false;
-        }
-
-        QMetaObject::invokeMethod(progressDialog.data(), [progressDialog, current, total]() {
-            if (!progressDialog) {
-                return;
-            }
-            progressDialog->setMaximum(total);
-            progressDialog->setValue(current);
-        }, Qt::QueuedConnection);
-
-        QCoreApplication::processEvents(QEventLoop::AllEvents);
-        return true;
-    });
-
-    bool exportResult = false;
-    QEventLoop loop;
-    QTimer::singleShot(0, this, [&]() {
-        exportResult = exporter.exportToFile(fileName);
-        loop.quit();
-    });
-    loop.exec();
-
-    if (progressDialog) {
-        progressDialog->close();
-        progressDialog->deleteLater();
-    }
-
-    if (exporter.wasCanceled()) {
-        setStatusMessage(tr("Export canceled"), 2000);
-        return;
-    }
-
-    if (!exportResult) {
-        QMessageBox::warning(this, tr("Export Failed"), tr("Could not export Ren'Py script."));
-        return;
-    }
-
-    setStatusMessage(QStringLiteral("Exported to Ren'Py"), 2000);
 }
 
 void MainWindow::onNodeSelected(const QString &nodeId)
@@ -477,4 +404,88 @@ void MainWindow::setStatusMessage(const QString &key, int timeoutMs)
     }
     const QByteArray utf8 = key.toUtf8();
     statusBar()->showMessage(tr(utf8.constData()), timeoutMs);
+}
+
+QString MainWindow::promptSaveFile(const QString &titleKey, const QString &filterKey)
+{
+    const QByteArray titleUtf8 = titleKey.toUtf8();
+    const QByteArray filterUtf8 = filterKey.toUtf8();
+    return QFileDialog::getSaveFileName(this, tr(titleUtf8.constData()), QString(), tr(filterUtf8.constData()));
+}
+
+void MainWindow::showWarningMessage(const QString &titleKey, const QString &messageKey)
+{
+    const QByteArray titleUtf8 = titleKey.toUtf8();
+    const QByteArray messageUtf8 = messageKey.toUtf8();
+    QMessageBox::warning(this, tr(titleUtf8.constData()), tr(messageUtf8.constData()));
+}
+
+void MainWindow::displayStatusMessage(const QString &key, int timeoutMs)
+{
+    setStatusMessage(key, timeoutMs);
+}
+
+void MainWindow::resetProjectFilePath()
+{
+    m_currentProjectFile.clear();
+}
+
+namespace {
+class ProgressDialogHandle : public gui::presenter::IExportProgressView
+{
+public:
+    explicit ProgressDialogHandle(QProgressDialog *dialog)
+        : m_dialog(dialog)
+    {
+    }
+
+    bool update(int current, int total) override
+    {
+        if (!m_dialog) {
+            return false;
+        }
+        if (total > 0) {
+            m_dialog->setMaximum(total);
+        }
+        m_dialog->setValue(current);
+        return !m_dialog->wasCanceled();
+    }
+
+    void close() override
+    {
+        if (!m_dialog) {
+            return;
+        }
+        m_dialog->close();
+        m_dialog->deleteLater();
+        m_dialog = nullptr;
+    }
+
+private:
+    QPointer<QProgressDialog> m_dialog;
+};
+} // namespace
+
+std::unique_ptr<gui::presenter::IExportProgressView> MainWindow::createExportProgressDialog(const QString &titleKey,
+                                                                                            const QString &labelKey,
+                                                                                            const QString &cancelKey)
+{
+    const QByteArray titleUtf8 = titleKey.toUtf8();
+    const QByteArray labelUtf8 = labelKey.toUtf8();
+    const QByteArray cancelUtf8 = cancelKey.toUtf8();
+
+    auto dialog = new QProgressDialog(tr(labelUtf8.constData()), tr(cancelUtf8.constData()), 0, 1, this);
+    dialog->setWindowTitle(tr(titleUtf8.constData()));
+    dialog->setWindowModality(Qt::ApplicationModal);
+    dialog->setMinimumDuration(0);
+    dialog->setAutoClose(false);
+    dialog->setAutoReset(false);
+    dialog->show();
+
+    return std::make_unique<ProgressDialogHandle>(dialog);
+}
+
+void MainWindow::processEvents()
+{
+    QCoreApplication::processEvents(QEventLoop::AllEvents);
 }
