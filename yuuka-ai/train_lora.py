@@ -1,16 +1,23 @@
+# -*- coding: utf-8 -*-
 """Fine-tune Qwen on Yuuka dialogues with parameter-efficient LoRA."""
 
 from __future__ import annotations
 
 import argparse
+import inspect
 from pathlib import Path
 from typing import Dict, List
 
 import torch
 from datasets import load_dataset
 from peft import LoraConfig, get_peft_model, prepare_model_for_kbit_training
-from transformers import (AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig,
-                          Trainer, TrainingArguments)
+from transformers import (
+    AutoModelForCausalLM,
+    AutoTokenizer,
+    BitsAndBytesConfig,
+    Trainer,
+    TrainingArguments,
+)
 
 DEFAULT_MODEL_NAME = "Qwen/Qwen2.5-7B-Instruct"
 DEFAULT_DATA_DIR = Path("data/processed")
@@ -20,13 +27,15 @@ MAX_SEQ_LEN = 1024
 
 def get_tokenizer(model_name: str):
     tokenizer = AutoTokenizer.from_pretrained(model_name, trust_remote_code=True)
+    # 补齐 PAD
     if tokenizer.pad_token is None:
         tokenizer.pad_token = tokenizer.eos_token
     tokenizer.padding_side = "right"
     return tokenizer
 
 
-def load_model(model_name: str):
+def load_model(model_name: str, tokenizer):
+    # 4-bit 量化
     quant_config = BitsAndBytesConfig(
         load_in_4bit=True,
         bnb_4bit_quant_type="nf4",
@@ -41,14 +50,26 @@ def load_model(model_name: str):
         trust_remote_code=True,
     )
     model = prepare_model_for_kbit_training(model)
-    model.config.use_cache = False
+    model.config.use_cache = False  # 训练时关闭 cache
 
+    # 同步 tokenizer 的 PAD/EOS 到 model.config，避免 token 提示
+    if hasattr(tokenizer, "pad_token_id") and tokenizer.pad_token_id is not None:
+        model.config.pad_token_id = tokenizer.pad_token_id
+        try:
+            model.generation_config.pad_token_id = tokenizer.pad_token_id
+        except Exception:
+            pass
+    if hasattr(tokenizer, "eos_token_id") and tokenizer.eos_token_id is not None:
+        model.config.eos_token_id = tokenizer.eos_token_id
+
+    # LoRA 配置（仅注意力层以省显存）
     lora_config = LoraConfig(
         r=16,
         lora_alpha=32,
         lora_dropout=0.05,
         target_modules=["q_proj", "k_proj", "v_proj", "o_proj"],
         task_type="CAUSAL_LM",
+        bias="none",
     )
     model = get_peft_model(model, lora_config)
     model.print_trainable_parameters()
@@ -56,48 +77,44 @@ def load_model(model_name: str):
 
 
 class PromptCompletionCollator:
+    """把 prompt/completion 拼接为 input_ids/labels；对 prompt 打 -100，只训练 completion。"""
+
     def __init__(self, tokenizer, max_seq_len: int):
         self.tokenizer = tokenizer
         self.max_seq_len = max_seq_len
 
     def __call__(self, batch: List[Dict[str, str]]) -> Dict[str, torch.Tensor]:
-        input_ids = []
-        labels = []
-        attention_masks = []
+        input_ids, labels, attention_masks = [], [], []
 
         for sample in batch:
             prompt = sample["prompt"]
             completion = sample["completion"].replace("<eos>", self.tokenizer.eos_token)
 
             prompt_ids = self.tokenizer.encode(prompt, add_special_tokens=False)
-            completion_ids = self.tokenizer.encode(
-                completion, add_special_tokens=False
-            )
+            completion_ids = self.tokenizer.encode(completion, add_special_tokens=False)
 
-            combined_ids = prompt_ids + completion_ids
-            combined_labels = [-100] * len(prompt_ids) + completion_ids
+            ids = prompt_ids + completion_ids
+            lbls = [-100] * len(prompt_ids) + completion_ids
 
-            if len(combined_ids) > self.max_seq_len:
-                combined_ids = combined_ids[: self.max_seq_len]
-                combined_labels = combined_labels[: self.max_seq_len]
+            if len(ids) > self.max_seq_len:
+                ids = ids[: self.max_seq_len]
+                lbls = lbls[: self.max_seq_len]
 
-            attention_mask = [1] * len(combined_ids)
+            mask = [1] * len(ids)
 
-            # Pad to max length for the batch.
-            input_ids.append(combined_ids)
-            labels.append(combined_labels)
-            attention_masks.append(attention_mask)
+            input_ids.append(ids)
+            labels.append(lbls)
+            attention_masks.append(mask)
 
-        batch_max = max(len(ids) for ids in input_ids)
-        padded_input_ids = []
-        padded_labels = []
-        padded_masks = []
+        batch_max = max(len(x) for x in input_ids)
+        pad_id = self.tokenizer.pad_token_id
 
-        for ids, lbls, mask in zip(input_ids, labels, attention_masks):
-            pad_len = batch_max - len(ids)
-            padded_input_ids.append(ids + [self.tokenizer.pad_token_id] * pad_len)
-            padded_masks.append(mask + [0] * pad_len)
-            padded_labels.append(lbls + [-100] * pad_len)
+        def pad(seq, pad_val, length):
+            return seq + [pad_val] * (length - len(seq))
+
+        padded_input_ids = [pad(x, pad_id, batch_max) for x in input_ids]
+        padded_masks = [pad(x, 0, batch_max) for x in attention_masks]
+        padded_labels = [pad(x, -100, batch_max) for x in labels]
 
         return {
             "input_ids": torch.tensor(padded_input_ids, dtype=torch.long),
@@ -126,9 +143,7 @@ def parse_args() -> argparse.Namespace:
         default=DEFAULT_OUTPUT_DIR,
         help="Where to store the trained LoRA adapter.",
     )
-    parser.add_argument(
-        "--num-epochs", type=float, default=3, help="Number of training epochs."
-    )
+    parser.add_argument("--num-epochs", type=float, default=3, help="Epochs.")
     parser.add_argument(
         "--eval-steps",
         type=int,
@@ -154,46 +169,72 @@ def main() -> None:
     args = parse_args()
 
     tokenizer = get_tokenizer(args.model_name)
-    model = load_model(args.model_name)
+    model = load_model(args.model_name, tokenizer)
 
     dataset = load_data(args.data_dir)
 
     collator = PromptCompletionCollator(tokenizer, max_seq_len=MAX_SEQ_LEN)
 
-    has_validation = "validation" in dataset
-    if has_validation:
-        evaluation_strategy = "steps" if args.eval_steps > 0 else "epoch"
-    else:
-        evaluation_strategy = "no"
-    eval_steps = args.eval_steps if has_validation and args.eval_steps > 0 else None
+    # ==== 版本兼容：根据 TrainingArguments 的入参动态拼参 ====
+    param_names = set(inspect.signature(TrainingArguments.__init__).parameters)
 
-    training_args = TrainingArguments(
-        output_dir=str(args.output_dir),
-        per_device_train_batch_size=1,
-        gradient_accumulation_steps=8,
-        gradient_checkpointing=True,
-        learning_rate=1e-4,
-        lr_scheduler_type="cosine",
-        warmup_ratio=0.03,
-        optim="paged_adamw_8bit",
-        num_train_epochs=args.num_epochs,
-        logging_steps=args.logging_steps,
-        evaluation_strategy=evaluation_strategy,
-        eval_steps=eval_steps,
-        save_strategy="epoch",
-        save_total_limit=2,
-        bf16=torch.cuda.is_available(),
-        dataloader_num_workers=2,
-        report_to=[],
-    )
+    def add_if_supported(d: dict, name: str, value):
+        if name in param_names and value is not None:
+            d[name] = value
+
+    has_validation = "validation" in dataset
+    eval_steps = args.eval_steps
+
+    base_kwargs = {}
+    if has_validation:
+        if "evaluation_strategy" in param_names:
+            base_kwargs["evaluation_strategy"] = (
+                "steps" if (eval_steps and eval_steps > 0) else "epoch"
+            )
+            add_if_supported(base_kwargs, "eval_steps", eval_steps if (eval_steps and eval_steps > 0) else None)
+        else:
+            base_kwargs["do_eval"] = True
+            add_if_supported(base_kwargs, "eval_steps", eval_steps if (eval_steps and eval_steps > 0) else None)
+    else:
+        if "evaluation_strategy" in param_names:
+            base_kwargs["evaluation_strategy"] = "no"
+        else:
+            base_kwargs["do_eval"] = False
+
+    # 保存/日志策略（旧版可能不支持 save_strategy/report_to）
+    add_if_supported(base_kwargs, "save_strategy", "epoch")
+    add_if_supported(base_kwargs, "save_total_limit", 2)
+    add_if_supported(base_kwargs, "logging_steps", args.logging_steps)
+
+    # 训练相关（8GB 安全配置）
+    base_kwargs["output_dir"] = str(args.output_dir)
+    base_kwargs["per_device_train_batch_size"] = 1
+    base_kwargs["gradient_accumulation_steps"] = 8
+    add_if_supported(base_kwargs, "gradient_checkpointing", True)
+    base_kwargs["learning_rate"] = 1e-4
+    add_if_supported(base_kwargs, "lr_scheduler_type", "cosine")
+    add_if_supported(base_kwargs, "warmup_ratio", 0.03)
+    add_if_supported(base_kwargs, "optim", "paged_adamw_8bit")  # 不支持会被自动忽略
+    base_kwargs["num_train_epochs"] = args.num_epochs
+    add_if_supported(base_kwargs, "dataloader_num_workers", 2)
+    add_if_supported(base_kwargs, "report_to", [])
+
+    # 精度（4060Ti 建议只开 fp16）
+    add_if_supported(base_kwargs, "fp16", True)
+    add_if_supported(base_kwargs, "bf16", False)
+
+    # 关键：保留原始列，交给自定义 collator 处理
+    base_kwargs["remove_unused_columns"] = False
+
+    training_args = TrainingArguments(**base_kwargs)
 
     trainer = Trainer(
         model=model,
-        tokenizer=tokenizer,
         args=training_args,
         train_dataset=dataset["train"],
         eval_dataset=dataset.get("validation"),
         data_collator=collator,
+        tokenizer=tokenizer,  # v5 以后会更名为 processing_class，当前正常可用
     )
 
     trainer.train()
