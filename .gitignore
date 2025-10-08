@@ -1,0 +1,13 @@
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.env
+.venv
+.env.local
+venv/
+.envrc
+.idea/
+.vscode/
+models/
+data/processed/
